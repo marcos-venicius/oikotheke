@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Note } from "@/lib/types";
-import { adjacentNotedPage, groupByPage, notedPages } from "./notedPages";
+import { adjacentNotedPage, notedPages } from "./notedPages";
 
 const note = (id: string, page: number | string): Note => ({
   id,
@@ -30,13 +30,5 @@ describe("notedPages", () => {
 
   it("skips notes without a valid page", () => {
     expect(notedPages([...notes, note("x", "epubcfi(/6/2)")])).toEqual([3, 12, 40]);
-  });
-
-  it("groups notes by page", () => {
-    expect(groupByPage(notes).map((g) => [g.page, g.notes.map((n) => n.id)])).toEqual([
-      [3, ["b"]],
-      [12, ["a", "c"]],
-      [40, ["d"]],
-    ]);
   });
 });

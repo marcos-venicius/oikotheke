@@ -5,8 +5,8 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 ## Status
 
-**Current phase:** EPUB support (plan in `CLAUDE.md`) — phases 1–3 (locations, import, reader) done
-**Next step:** EPUB phase 4 (notes at a CFI location, indicators, annotated-location navigation, details page). Other candidate follow-ups (not started):
+**Current phase:** EPUB support complete (phases 1–4) — awaiting user feedback
+**Next step:** user reinstalls (`scripts/install.sh`; migrates their real DB to schema 3) and checks import errors via the picker. Candidate follow-ups (not started):
 - Continuous-scroll reading mode (virtualized, reusing `PageRenderer`).
 - Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
 - Sort/search on the shelf by title/author.
@@ -30,6 +30,15 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
+
+## EPUB phase 4: notes (2026-09-28)
+
+- `NotesPanel` is format-agnostic: props `here` ({key, label, notes, create}), `prev`/`next` ({label, go} | null), `groups` (`NoteGroup[]`), `currentGroup`, `onOpenGroup`. `useBookNotes` no longer computes PDF pages; `PdfReader` builds its props from `notedPages`/`adjacentNotedPage`, `EpubReader` from CFIs.
+- `ui/lib/notes.ts`: `compareLocations`, `sortNotes`, `noteLabel`, `groupNotes` (PDF by page, EPUB by consecutive chapter label), `isWithin(point, rangeCfi)`, `rangeStart` — via foliate `epubcfi.js` `compare`/`collapse` (pure module). Tests with real CFI shapes.
+- EPUB note location = `collapse(relocate.cfi)` (start of the visible range); label = `relocate.tocItem.label` (the chapter shown in the bottom bar — foliate picks it for the visible range, so it can be the next heading on the page). Notes "here" = `isWithin(note, visible range)`. Scrubber marks = `view.getSectionFractions()[view.resolveCFI(cfi).index]` (chapter start; approximate). Reader opens at `location.state.location` (details page) for both formats (PDF: `pdfPage`).
+- Fixed on the way: dark-mode overrides lost to books' own `!important` rules (pandoc: `code.sourceCode > span { color: black !important }` made code invisible). Overrides now use `:not(#oikotheke):not(#oikotheke)` for id-level specificity. EPUB scrubber moved inside `<main>` so it doesn't run under the notes panel; notes-panel jump buttons capped at 42% width.
+- Verified in the app (scratch data, the user's EPUB): create note, dot + mark, move away, "Previous" jumps back, details page (Format EPUB, no Pages, "7% read", note under its chapter) opens the reader at the note (7%) rather than the last position (8%); PDF notes still work (Page 29 note, jump from 31). Release build + hostile EPUB re-verified (no requests, no script, link dialog, Esc opens nothing). 37 vitest + 54 Rust.
+- Gotcha (again): `pkill`-style patterns like `npm run tauri` also match your own `npm run tauri build` command and kill it — stop the dev app in a separate command.
 
 ## Book links (2026-09-28)
 

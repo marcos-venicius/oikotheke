@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Note } from "@/lib/types";
 import { toast } from "@/components/toast";
 import { describeError } from "@/services/ipc";
 import { notesService } from "@/services/notesService";
-import { notedPages } from "./notedPages";
 
 /** Notes of one book, loaded once per reading session and kept in sync with the backend. */
 export function useBookNotes(bookId: string) {
@@ -47,8 +46,7 @@ export function useBookNotes(bookId: string) {
     setNotes((list) => list.filter((n) => n.id !== id));
   }, []);
 
-  const pages = useMemo(() => notedPages(notes), [notes]);
-  return { notes, pages, create, update, remove };
+  return { notes, create, update, remove };
 }
 
 export type BookNotes = ReturnType<typeof useBookNotes>;

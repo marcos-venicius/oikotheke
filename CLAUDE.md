@@ -10,9 +10,8 @@ from the code. Implementation details, progress and gotchas go in `PROGRESS.md` 
 
 ## Overview
 
-**Oikotheke** is a desktop application to organize, read and annotate books locally. It reads PDF
-and EPUB books; notes work for PDF, and EPUB notes are next (see
-[EPUB support](#epub-support-planned)).
+**Oikotheke** is a desktop application to organize, read and annotate books locally. It reads and
+annotates PDF and EPUB books (see [Formats](#formats)).
 
 It works as a **digital bookshelf**: the user imports books, organizes the library and opens
 any document in a book-like reading experience.
@@ -39,8 +38,8 @@ The core principle is **local-first**:
 - The application works fully offline.
 
 **Status:** v1 is complete (library, reader, progress, notes, book details, hardening, Linux
-install) and renamed to Oikotheke. EPUB import and reading are done; EPUB notes (phase 4)
-are next.
+install) and renamed to Oikotheke. PDF and EPUB are fully supported (import, reading,
+progress, notes).
 
 ## Goals
 
@@ -246,14 +245,32 @@ and rejects invalid ones instead of storing them.
 
 ## Notes
 
-Users create notes tied to a location (a page, for PDF). A location can have multiple notes.
+Users create notes tied to a location. A location can have multiple notes.
 
-Inside the reader the user can:
+Inside the reader (N opens the notes panel) the user can:
 
 - Create a note on the current page.
 - See the current page's notes.
 - Edit and delete notes.
-- See which pages have notes, and navigate between annotated pages.
+- See which pages have notes (a dot on the notes button, marks on the progress bar), and jump
+  to the previous/next annotated place.
+- See all notes of the book in reading order and jump to any of them.
+
+What "the current page" means depends on the format:
+
+| | PDF | EPUB |
+|---|---|---|
+| A note's location | the page | the start of the text on screen when it was written (CFI) |
+| Notes of the current page | notes on that page | notes whose location is in the text on screen |
+| Label | "Page 42" | the chapter shown when it was written |
+| Grouped by | page | consecutive chapter |
+| Progress-bar marks | exact page | start of the note's chapter (approximate) |
+
+EPUB pages depend on window and font size, so a note may show up one page earlier or later
+after the layout changes; it is always on the page that contains its location.
+
+The shared `NotesPanel` knows nothing about formats: each reader passes what "here" is, the
+previous/next annotated place and the groups. Ordering and grouping live in `ui/lib/notes.ts`.
 
 Notes are persisted automatically. Content is trimmed, non-empty and at most 20,000
 characters; the location must be valid for the book (for PDF, a page within its range). An
@@ -261,7 +278,8 @@ optional label (at most 200 characters) is captured at creation for formats whos
 are not human-readable. The backend returns notes in creation order; ordering by location is
 format-specific and done in the UI.
 
-The book details page also lists a book's notes and can open the reader at a note's page.
+The book details page lists a book's notes, grouped the same way, and opens the reader at a
+note's exact location (`navigate("/read/<id>", { state: { location } })`).
 
 ## Data model
 
@@ -324,32 +342,17 @@ Schema changes go through append-only migrations (`src-tauri/src/db/migrations.r
 edit an existing migration. Migration 3 replaced `books.current_page` and
 `notes.page_number` with locations, losslessly.
 
-## EPUB support (planned)
-
-Phases 1 (model), 2 (import) and 3 (reader) are done; EPUB notes are not. This section is the agreed
-design; move each part into the sections above as it ships, and delete this section when EPUB
-is complete.
-
-### Principle
+## Formats
 
 PDF and EPUB share everything except the reader engine: library, storage, import queue,
-removal, reconcile, book details, notes and progress. Format-specific code lives behind
-small interfaces, never as `if (format === …)` scattered across screens.
+removal, reconcile, book details, notes and progress. Format-specific code lives behind small
+interfaces (`ui/lib/location.ts`, `ui/lib/notes.ts`, `services/location.rs`, the import
+extractors, the readers), never as `if (format === …)` scattered across screens. The readers
+are separate components (`PdfReader`, `EpubReader`) chosen once by `ReaderPage`; each reports
+location changes to the shared autosave and builds the notes panel's data.
 
-The readers are separate components (`PdfReader`, `EpubReader`) chosen once by
-`ReaderPage`; each reports location changes to the shared autosave.
-
-### Phases
-
-Each phase is a separate, releasable change that keeps PDF fully working:
-
-1. ✅ **Generalize the model** — `format`, `location`, `progress`, note `location`/`label`,
-   lossless migration. PDF only; no visible change.
-2. ✅ **EPUB import** — detection, storage, OPF metadata and cover; EPUBs appear on the shelf
-   (opening one shows "not available yet" until phase 3).
-3. ✅ **EPUB reader** — foliate-js reader, autosave and resume.
-4. **EPUB notes** — create/edit/delete at a location, indicators, navigate annotated
-   locations; the book details page lists them.
+Adding a format means: detection and storage (`storage::detect_format`), an import extractor,
+location validation, a reader, and the note ordering/labels — plus a check against this file.
 
 ## Data integrity
 
@@ -482,6 +485,13 @@ primary tested platform (`scripts/install.sh` / `scripts/uninstall.sh`).
 - Reader: navigation, jump to page, zoom and fit modes, focus mode, autosave and resume.
 - Notes: create, edit, delete, per-page view, indicators, annotated-page navigation.
 
+### Delivered after v1
+
+- Rename to Oikotheke, with automatic migration of existing libraries.
+- EPUB: import (metadata, cover, DRM/damage checks), reader (pages or scroll, contents, font
+  size, theme), progress and resume, notes — with the same flow as PDF.
+- Web links in books open in the browser after confirmation.
+
 ### Out of scope (for now)
 
 - Cloud sync, sync across devices.
@@ -532,22 +542,22 @@ When adding a feature, check its impact on:
 
 ## Main success criterion
 
-The core flow must work reliably, including across app restarts:
+The core flow must work reliably for PDF and EPUB, including across app restarts:
 
 ```text
-Import PDF
+Import a PDF or EPUB
     ↓
-PDF is copied into app storage
+The file is copied into app storage
     ↓
 Book appears in the library
     ↓
 User opens the book and reads
     ↓
-App saves the current page automatically
+App saves the current position automatically
     ↓
 User adds notes to pages
     ↓
 User closes the book and reopens it
     ↓
-Book returns to the last page read, notes still available
+Book returns to the last position read, notes still available
 ```

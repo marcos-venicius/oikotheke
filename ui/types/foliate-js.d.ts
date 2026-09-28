@@ -45,6 +45,9 @@ declare module "foliate-js/view.js" {
   }
 
   export class View extends HTMLElement {
+    /** Where each section starts, as a fraction of the whole book. */
+    getSectionFractions(): number[];
+    resolveCFI(cfi: string): { index: number };
     book: FoliateBook;
     renderer: Paginator;
     lastLocation: RelocateDetail | null;
@@ -58,4 +61,11 @@ declare module "foliate-js/view.js" {
     prev(): Promise<void>;
     next(): Promise<void>;
   }
+}
+
+declare module "foliate-js/epubcfi.js" {
+  /** Orders two CFIs (points or ranges) in reading order: negative, 0 or positive. */
+  export function compare(a: string, b: string): number;
+  /** The start (or end) point of a range CFI; points are returned as they are. */
+  export function collapse(cfi: string, toEnd?: boolean): string;
 }

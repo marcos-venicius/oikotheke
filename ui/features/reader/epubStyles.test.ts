@@ -28,5 +28,7 @@ describe("contentCss", () => {
     const dark = contentCss(100, { ...theme, dark: true });
     expect(dark).toContain("color-scheme: dark");
     expect(dark).toContain("color: #111 !important");
+    // Outranks books' own `!important` rules on classes.
+    expect(dark).toContain("body *:not(#oikotheke):not(#oikotheke)");
   });
 });

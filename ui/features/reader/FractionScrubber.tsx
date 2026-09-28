@@ -5,6 +5,8 @@ interface FractionScrubberProps {
   /** Reading position in [0, 1]. */
   fraction: number;
   label?: string;
+  /** Fractions to mark on the bar (e.g. where notes are). */
+  marks?: number[];
   visible: boolean;
   onGoTo: (fraction: number) => void;
 }
@@ -12,7 +14,13 @@ interface FractionScrubberProps {
 const STEPS = 1000;
 
 /** Progress bar for reflowable books, which have no fixed pages. Navigates on release. */
-export function FractionScrubber({ fraction, label, visible, onGoTo }: FractionScrubberProps) {
+export function FractionScrubber({
+  fraction,
+  label,
+  marks = [],
+  visible,
+  onGoTo,
+}: FractionScrubberProps) {
   const [drag, setDrag] = useState<{ from: number; value: number } | null>(null);
   const preview = drag?.from === fraction ? drag.value : null;
   const shown = preview ?? fraction;
@@ -37,6 +45,13 @@ export function FractionScrubber({ fraction, label, visible, onGoTo }: FractionS
             className="absolute inset-y-0 left-0 rounded-full bg-accent"
             style={{ width: `${shown * 100}%` }}
           />
+          {marks.map((mark) => (
+            <span
+              key={mark}
+              className="absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-text/70"
+              style={{ left: `${mark * 100}%` }}
+            />
+          ))}
         </div>
         <input
           type="range"

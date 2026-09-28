@@ -12,7 +12,7 @@ import { libraryService } from "@/services/libraryService";
 import { notesService } from "@/services/notesService";
 import { BookCover } from "@/features/library/BookCover";
 import { RemoveBookDialog, type RemoveMode } from "@/features/library/RemoveBookDialog";
-import { groupByPage } from "@/features/reader/notedPages";
+import { groupNotes } from "@/lib/notes";
 
 type State =
   | { status: "loading" }
@@ -77,8 +77,8 @@ export function BookDetailsPage() {
             <Details
               book={current.book}
               notes={current.notes}
-              onRead={(page) =>
-                navigate(`/read/${current.book.id}`, page ? { state: { page } } : undefined)
+              onRead={(location) =>
+                navigate(`/read/${current.book.id}`, location ? { state: { location } } : undefined)
               }
               onRemove={() => setRemoving(true)}
             />
@@ -103,11 +103,11 @@ function Details({
 }: {
   book: Book;
   notes: Note[];
-  onRead: (page?: number) => void;
+  onRead: (location?: string) => void;
   onRemove: () => void;
 }) {
   const progress = book.progress;
-  const groups = useMemo(() => groupByPage(notes), [notes]);
+  const groups = useMemo(() => groupNotes(book.format, notes), [book.format, notes]);
   const readable = book.status === "ready" && book.removedAt === null;
   const facts = [
     ["Format", formatLabel(book.format)],
@@ -180,19 +180,17 @@ function Details({
           <p className="mt-3 text-sm text-muted">No notes yet. Press N while reading to add one.</p>
         ) : (
           <ul className="mt-3 divide-y divide-border border-y border-border">
-            {groups.map(({ page, notes: list }) => (
-              <li key={page}>
+            {groups.map((group) => (
+              <li key={group.key}>
                 <button
                   type="button"
                   disabled={!readable}
-                  onClick={() => onRead(page)}
-                  className="flex w-full gap-6 py-3.5 text-left transition-colors enabled:hover:bg-surface-2"
+                  onClick={() => onRead(group.location)}
+                  className="flex w-full flex-col gap-1.5 px-2 py-3.5 text-left transition-colors enabled:hover:bg-surface-2"
                 >
-                  <span className="w-16 shrink-0 pl-2 text-xs font-medium text-accent tabular-nums">
-                    p. {page}
-                  </span>
+                  <span className="text-xs font-medium text-accent">{group.label}</span>
                   <span className="flex min-w-0 flex-col gap-2">
-                    {list.map((note) => (
+                    {group.notes.map((note) => (
                       <span key={note.id} className="text-sm whitespace-pre-wrap">
                         {note.content}
                       </span>

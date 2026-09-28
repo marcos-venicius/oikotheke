@@ -29,15 +29,19 @@ export interface ContentTheme {
  * hardcode black on white.
  */
 export function contentCss(fontSize: number, theme: ContentTheme): string {
+  // Books use `!important` too (e.g. pandoc's `code.sourceCode > span { color: black
+  // !important }`), and between two `!important` rules the more specific wins. Each
+  // `:not(#…)` counts as an id, which outranks the class-based selectors books use.
+  const strong = ":not(#oikotheke):not(#oikotheke)";
   const dark = theme.dark
     ? `
-    html, body, body * {
+    html${strong}, body${strong}, body *${strong} {
       color: ${theme.text} !important;
       background-color: transparent !important;
       border-color: currentColor;
     }
-    a:link, a:visited, a:link *, a:visited * { color: ${theme.accent} !important; }
-    img { background-color: #fff !important; }`
+    :is(a:link, a:visited, a:link *, a:visited *)${strong} { color: ${theme.accent} !important; }
+    img${strong} { background-color: #fff !important; }`
     : "";
   return `
     html {

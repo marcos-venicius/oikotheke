@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import type { RelocateDetail, View } from "foliate-js/view.js";
-import type { Book } from "@/lib/types";
+import type { Book, Note } from "@/lib/types";
+import {
+  compareLocations,
+  groupNotes,
+  isWithin,
+  noteLabel,
+  rangeStart,
+  sortNotes,
+} from "@/lib/notes";
 import { useTheme } from "@/app/theme";
 import { toast } from "@/components/toast";
 import { openEpub } from "@/services/epubService";
@@ -10,10 +18,12 @@ import { linkService, webUrl } from "@/services/linkService";
 import { contentCss, stepFontSize, type EpubFlow } from "./epubStyles";
 import { EpubToolbar } from "./EpubToolbar";
 import { FractionScrubber } from "./FractionScrubber";
+import { NotesPanel, type NotesJump } from "./NotesPanel";
 import { OpenLinkDialog } from "./OpenLinkDialog";
 import { ignoresShortcuts, useChromeVisibility } from "./readerChrome";
 import { ReaderError, ReaderLoading } from "./ReaderStatus";
 import { TocPanel } from "./TocPanel";
+import { useBookNotes } from "./useBookNotes";
 import { useEpubPrefs } from "./useEpubPrefs";
 import { useFocusMode } from "./useFocusMode";
 import { useProgressSaver } from "./useProgressSaver";
@@ -24,6 +34,8 @@ const LAYOUT = { "max-inline-size": "720px", gap: "7%", margin: "56px" };
 interface Position {
   fraction: number;
   chapter?: string;
+  /** Range CFI of the text on screen. */
+  visible?: string;
 }
 
 /** EPUB reading: foliate-js lays out the book in iframes; positions are CFIs. */
@@ -34,6 +46,11 @@ export function EpubReader({ book }: { book: Book }) {
   const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState<Position>({ fraction: book.progress });
   const [tocOpen, setTocOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  // Callers may open the reader at a location (e.g. a note in book details).
+  const requested = (useLocation().state as { location?: string } | null)?.location;
+  const [startAt] = useState(() => requested ?? book.location);
+  const notes = useBookNotes(book.id);
   const [pendingLink, setPendingLink] = useState<URL | null>(null);
   const { prefs, update } = useEpubPrefs();
   const { resolved: theme } = useTheme();
@@ -45,7 +62,7 @@ export function EpubReader({ book }: { book: Book }) {
   const onRelocate = useCallback(
     ({ fraction, cfi, tocItem }: RelocateDetail) => {
       const progress = Math.min(1, Math.max(0, fraction ?? 0));
-      setPosition({ fraction: progress, chapter: tocItem?.label?.trim() });
+      setPosition({ fraction: progress, chapter: tocItem?.label?.trim(), visible: cfi });
       if (cfi) saver.schedule({ location: cfi, progress, zoomMode: null, zoomLevel: null });
     },
     [saver],
@@ -105,6 +122,10 @@ export function EpubReader({ book }: { book: Book }) {
       case "T":
         setTocOpen((open) => !open);
         break;
+      case "n":
+      case "N":
+        setNotesOpen((open) => !open);
+        break;
       case "f":
       case "F":
       case "F11":
@@ -160,7 +181,7 @@ export function EpubReader({ book }: { book: Book }) {
         await el.open(epub);
         for (const [name, value] of Object.entries(LAYOUT)) el.renderer.setAttribute(name, value);
         if (active) setView(el);
-        await el.init({ lastLocation: book.location });
+        await el.init({ lastLocation: startAt });
       } catch (err) {
         console.error("failed to open EPUB", err);
         if (active) setError("This EPUB is damaged or can't be displayed.");
@@ -171,7 +192,7 @@ export function EpubReader({ book }: { book: Book }) {
       opened?.close();
       opened?.remove();
     };
-  }, [book, prefsLoaded, onKey]);
+  }, [book, prefsLoaded, onKey, startAt]);
 
   // Styles and layout follow the preferences and the app theme. The theme's colors are read a
   // frame later: ThemeProvider applies them in its own effect, which runs after this one.
@@ -193,15 +214,51 @@ export function EpubReader({ book }: { book: Book }) {
     return () => cancelAnimationFrame(frame);
   }, [view, prefs, theme]);
 
+  const sorted = useMemo(() => sortNotes("epub", notes.notes), [notes.notes]);
+  const noteGroups = useMemo(() => groupNotes("epub", notes.notes), [notes.notes]);
+  const { visible } = position;
+  const hereNotes = useMemo(
+    () => (visible ? sorted.filter((n) => isWithin(n.location, visible)) : []),
+    [sorted, visible],
+  );
+  // Scrubber marks sit at the start of each annotated chapter (positions inside a chapter
+  // aren't known until it is laid out).
+  const marks = useMemo(() => {
+    if (!view) return [];
+    const starts = view.getSectionFractions();
+    const fractions = sorted.flatMap((n) => {
+      try {
+        const start = starts[view.resolveCFI(n.location).index];
+        return start === undefined ? [] : [start];
+      } catch {
+        return [];
+      }
+    });
+    return [...new Set(fractions)];
+  }, [view, sorted]);
+  const jump = (note: Note | undefined): NotesJump | null =>
+    note ? { label: noteLabel("epub", note), go: () => void view?.goTo(note.location) } : null;
+  const prev = visible
+    ? sorted.findLast((n) => compareLocations("epub", n.location, rangeStart(visible)) < 0)
+    : undefined;
+  const next = visible
+    ? sorted.find(
+        (n) =>
+          !isWithin(n.location, visible) &&
+          compareLocations("epub", n.location, rangeStart(visible)) > 0,
+      )
+    : undefined;
+
   if (error) return <ReaderError message={error} />;
 
   const toc = view?.book.toc ?? [];
+  const chromeVisible = chrome.visible || tocOpen || notesOpen;
   return (
     <div className="relative h-full overflow-hidden bg-bg" onPointerMove={chrome.poke}>
       {prefs && (
         <EpubToolbar
           title={book.title}
-          visible={chrome.visible || tocOpen}
+          visible={chromeVisible}
           fontSize={prefs.fontSize}
           flow={prefs.flow}
           focusMode={focus}
@@ -214,6 +271,9 @@ export function EpubReader({ book }: { book: Book }) {
           onFlow={(flow: EpubFlow) => update({ flow })}
           onToggleToc={() => setTocOpen((open) => !open)}
           onToggleFocus={toggleFocus}
+          notesOpen={notesOpen}
+          hasNotesHere={hereNotes.length > 0}
+          onToggleNotes={() => setNotesOpen((open) => !open)}
         />
       )}
       <div className="flex h-full">
@@ -234,7 +294,34 @@ export function EpubReader({ book }: { book: Book }) {
               <ReaderLoading />
             </div>
           )}
+          <FractionScrubber
+            fraction={position.fraction}
+            label={position.chapter}
+            marks={marks}
+            visible={chromeVisible}
+            onGoTo={(fraction) => void view?.goToFraction(fraction)}
+          />
         </main>
+        {notesOpen && visible && (
+          <div className="pt-14">
+            <NotesPanel
+              notes={notes}
+              here={{
+                key: visible,
+                label: "This page",
+                notes: hereNotes,
+                create: (content) =>
+                  notes.create(rangeStart(visible), position.chapter ?? null, content),
+              }}
+              prev={jump(prev)}
+              next={jump(next)}
+              groups={noteGroups}
+              currentGroup={noteGroups.find((g) => g.notes.some((n) => hereNotes.includes(n)))?.key}
+              onOpenGroup={(group) => void view?.goTo(group.location)}
+              onClose={() => setNotesOpen(false)}
+            />
+          </div>
+        )}
       </div>
       <OpenLinkDialog
         url={pendingLink}
@@ -247,12 +334,6 @@ export function EpubReader({ book }: { book: Book }) {
               toast("Could not open the link", { tone: "error", description: describeError(err) }),
             );
         }}
-      />
-      <FractionScrubber
-        fraction={position.fraction}
-        label={position.chapter}
-        visible={chrome.visible || tocOpen}
-        onGoTo={(fraction) => void view?.goToFraction(fraction)}
       />
     </div>
   );

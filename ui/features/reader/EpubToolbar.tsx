@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Maximize,
   Minimize,
+  NotebookPen,
   ScrollText,
   TableOfContents,
 } from "lucide-react";
@@ -23,6 +24,9 @@ interface EpubToolbarProps {
   focusMode: boolean;
   tocOpen: boolean;
   hasToc: boolean;
+  notesOpen: boolean;
+  /** Notes exist in the text on screen. */
+  hasNotesHere: boolean;
   onBack: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -30,6 +34,7 @@ interface EpubToolbarProps {
   onFlow: (flow: EpubFlow) => void;
   onToggleToc: () => void;
   onToggleFocus: () => void;
+  onToggleNotes: () => void;
 }
 
 const icon = "size-[18px]";
@@ -109,6 +114,17 @@ export function EpubToolbar(props: EpubToolbarProps) {
           )}
         </IconButton>
         <span className="mx-1 h-5 w-px bg-border" />
+        <IconButton
+          label="Notes (N)"
+          active={props.notesOpen}
+          onClick={props.onToggleNotes}
+          className="relative"
+        >
+          <NotebookPen className={icon} strokeWidth={1.75} />
+          {props.hasNotesHere && (
+            <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-accent ring-2 ring-bg" />
+          )}
+        </IconButton>
         <ThemeToggle />
       </div>
     </header>

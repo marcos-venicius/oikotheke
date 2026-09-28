@@ -1,6 +1,6 @@
 /**
- * Second line of defense for EPUB content, after the CSP (see CLAUDE.md, "Security and
- * privacy"). foliate-js already drops packaged scripts; this removes what it keeps: inline
+ * Second line of defense for EPUB content, after the CSP (see CLAUDE.md, "Book content is
+ * untrusted"). foliate-js already drops packaged scripts; this removes what it keeps: inline
  * scripts, event handlers, embedded browsing contexts and references to the network.
  */
 

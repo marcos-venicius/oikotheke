@@ -1,34 +1,51 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
 import type { Note } from "@/lib/types";
+import type { NoteGroup } from "@/lib/notes";
 import { debounce } from "@/lib/debounce";
-import { pdfLocation, pdfPage } from "@/lib/location";
 import { formatRelative, plural } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Button, IconButton } from "@/components/Button";
 import type { BookNotes } from "./useBookNotes";
-import { adjacentNotedPage, groupByPage } from "./notedPages";
 
-type Tab = "page" | "all";
+type Tab = "here" | "all";
+
+/** The place being read: a PDF page, or the visible part of an EPUB. */
+export interface NotesHere {
+  /** Identifies the place; a draft belongs to the place it was started on. */
+  key: string;
+  /** Tab title, e.g. "Page 30" or "This page". */
+  label: string;
+  notes: Note[];
+  /** Creates a note here. */
+  create: (content: string) => Promise<unknown>;
+}
+
+/** A neighbouring annotated place. */
+export interface NotesJump {
+  label: string;
+  go: () => void;
+}
 
 interface NotesPanelProps {
-  page: number;
   notes: BookNotes;
-  onGoTo: (page: number) => void;
+  here: NotesHere;
+  prev: NotesJump | null;
+  next: NotesJump | null;
+  /** Every note of the book, grouped in reading order. */
+  groups: NoteGroup[];
+  /** Key of the group being read, highlighted in "All notes". */
+  currentGroup?: string;
+  onOpenGroup: (group: NoteGroup) => void;
   onClose: () => void;
 }
 
-export function NotesPanel({ page, notes, onGoTo, onClose }: NotesPanelProps) {
-  const [tab, setTab] = useState<Tab>("page");
-  // A draft belongs to the page it was started on.
-  const [draftPage, setDraftPage] = useState<number | null>(null);
-  const pageNotes = useMemo(
-    () => notes.notes.filter((n) => pdfPage(n.location) === page),
-    [notes.notes, page],
-  );
-  const prev = adjacentNotedPage(notes.pages, page, -1);
-  const next = adjacentNotedPage(notes.pages, page, 1);
-  const drafting = draftPage === page;
+/** Notes side panel shared by the readers; each reader decides what "here" means. */
+export function NotesPanel(props: NotesPanelProps) {
+  const { notes, here, prev, next } = props;
+  const [tab, setTab] = useState<Tab>("here");
+  const [draftKey, setDraftKey] = useState<string | null>(null);
+  const drafting = draftKey === here.key;
 
   return (
     <aside
@@ -37,7 +54,7 @@ export function NotesPanel({ page, notes, onGoTo, onClose }: NotesPanelProps) {
     >
       <div className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-3">
         <div className="flex rounded-lg bg-surface-2 p-0.5 text-xs font-medium" role="tablist">
-          {(["page", "all"] as const).map((t) => (
+          {(["here", "all"] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -49,19 +66,19 @@ export function NotesPanel({ page, notes, onGoTo, onClose }: NotesPanelProps) {
                 tab === t ? "bg-surface text-text shadow-soft" : "text-muted hover:text-text",
               )}
             >
-              {t === "page" ? `Page ${page}` : `All notes · ${notes.notes.length}`}
+              {t === "here" ? here.label : `All notes · ${notes.notes.length}`}
             </button>
           ))}
         </div>
-        <IconButton label="Close notes (N)" onClick={onClose} className="ml-auto">
+        <IconButton label="Close notes (N)" onClick={props.onClose} className="ml-auto">
           <X className="size-4" />
         </IconButton>
       </div>
 
-      {tab === "page" ? (
+      {tab === "here" ? (
         <>
           <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3">
-            {pageNotes.map((note) => (
+            {here.notes.map((note) => (
               <NoteEditor
                 key={note.id}
                 note={note}
@@ -73,52 +90,56 @@ export function NotesPanel({ page, notes, onGoTo, onClose }: NotesPanelProps) {
               <NoteEditor
                 autoFocus
                 onSave={async (content) => {
-                  await notes.create(pdfLocation(page), null, content);
-                  setDraftPage(null);
+                  await here.create(content);
+                  setDraftKey(null);
                 }}
-                onDiscard={() => setDraftPage(null)}
+                onDiscard={() => setDraftKey(null)}
               />
             )}
-            {pageNotes.length === 0 && !drafting && (
+            {here.notes.length === 0 && !drafting && (
               <p className="px-1 pt-2 text-sm text-muted">No notes on this page yet.</p>
             )}
             {!drafting && (
               <Button
                 variant="ghost"
                 className="justify-start text-muted"
-                onClick={() => setDraftPage(page)}
+                onClick={() => setDraftKey(here.key)}
               >
                 <Plus className="size-4" /> Add note
               </Button>
             )}
           </div>
-          <div className="flex shrink-0 items-center justify-between border-t border-border px-2 py-2 text-xs text-muted">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-2 py-2 text-xs text-muted">
             <Button
               variant="ghost"
-              className="h-8 px-2 text-xs"
+              className="h-8 max-w-[42%] min-w-0 px-2 text-xs"
               disabled={prev === null}
-              onClick={() => prev !== null && onGoTo(prev)}
+              onClick={prev?.go}
+              title={prev?.label}
             >
-              <ChevronLeft className="size-3.5" /> {prev !== null ? `Page ${prev}` : "Previous"}
+              <ChevronLeft className="size-3.5 shrink-0" />
+              <span className="truncate">{prev?.label ?? "Previous"}</span>
             </Button>
-            <span>Annotated pages</span>
+            <span className="shrink-0">Notes</span>
             <Button
               variant="ghost"
-              className="h-8 px-2 text-xs"
+              className="h-8 max-w-[42%] min-w-0 px-2 text-xs"
               disabled={next === null}
-              onClick={() => next !== null && onGoTo(next)}
+              onClick={next?.go}
+              title={next?.label}
             >
-              {next !== null ? `Page ${next}` : "Next"} <ChevronRight className="size-3.5" />
+              <span className="truncate">{next?.label ?? "Next"}</span>
+              <ChevronRight className="size-3.5 shrink-0" />
             </Button>
           </div>
         </>
       ) : (
         <AllNotes
-          notes={notes.notes}
-          currentPage={page}
-          onOpen={(p) => {
-            onGoTo(p);
-            setTab("page");
+          groups={props.groups}
+          current={props.currentGroup}
+          onOpen={(group) => {
+            props.onOpenGroup(group);
+            setTab("here");
           }}
         />
       )}
@@ -127,37 +148,36 @@ export function NotesPanel({ page, notes, onGoTo, onClose }: NotesPanelProps) {
 }
 
 function AllNotes({
-  notes,
-  currentPage,
+  groups,
+  current,
   onOpen,
 }: {
-  notes: Note[];
-  currentPage: number;
-  onOpen: (page: number) => void;
+  groups: NoteGroup[];
+  current?: string;
+  onOpen: (group: NoteGroup) => void;
 }) {
-  const groups = useMemo(() => groupByPage(notes), [notes]);
   if (groups.length === 0) {
-    return <p className="p-4 text-sm text-muted">Notes you add to any page will show up here.</p>;
+    return <p className="p-4 text-sm text-muted">Notes you add will show up here.</p>;
   }
   return (
     <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-2">
-      {groups.map(({ page, notes: list }) => (
+      {groups.map((group) => (
         <button
-          key={page}
+          key={group.key}
           type="button"
-          onClick={() => onOpen(page)}
+          onClick={() => onOpen(group)}
           className={cn(
             "block w-full rounded-lg p-2.5 text-left transition-colors hover:bg-surface-2",
-            page === currentPage && "bg-surface-2",
+            group.key === current && "bg-surface-2",
           )}
         >
           <span className="text-xs font-medium text-accent">
-            Page {page}
-            {list.length > 1 && (
-              <span className="text-muted"> · {plural(list.length, "note")}</span>
+            {group.label}
+            {group.notes.length > 1 && (
+              <span className="text-muted"> · {plural(group.notes.length, "note")}</span>
             )}
           </span>
-          {list.map((note) => (
+          {group.notes.map((note) => (
             <span key={note.id} className="mt-1 line-clamp-3 text-sm whitespace-pre-wrap">
               {note.content}
             </span>

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { Book, ZoomMode } from "@/lib/types";
 import { pdfLocation, pdfPage, pdfProgress } from "@/lib/location";
+import { groupNotes } from "@/lib/notes";
+import { adjacentNotedPage, notedPages } from "./notedPages";
 import { NotesPanel } from "./NotesPanel";
 import { ignoresShortcuts, useChromeVisibility } from "./readerChrome";
 import { ReaderError, ReaderLoading } from "./ReaderStatus";
@@ -25,8 +27,9 @@ export function PdfReader({ book }: { book: Book }) {
 
 function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   const navigate = useNavigate();
-  // Callers may open the reader at a specific page (e.g. a note in book details).
-  const requestedPage = (useLocation().state as { page?: number } | null)?.page;
+  // Callers may open the reader at a location (e.g. a note in book details).
+  const requested = (useLocation().state as { location?: string } | null)?.location;
+  const requestedPage = pdfPage(requested);
   const pageCount = renderer.pageCount;
   const [page, setPage] = useState(() =>
     clampPage(requestedPage ?? pdfPage(book.location) ?? 1, pageCount),
@@ -36,6 +39,8 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   const [resolvedZoom, setResolvedZoom] = useState(customZoom);
   const [notesOpen, setNotesOpen] = useState(false);
   const notes = useBookNotes(book.id);
+  const notedPageList = useMemo(() => notedPages(notes.notes), [notes.notes]);
+  const noteGroups = useMemo(() => groupNotes("pdf", notes.notes), [notes.notes]);
   const chrome = useChromeVisibility();
   const { focus, setFocusMode } = useFocusMode();
   // While annotating, keep the toolbar in place above the notes panel.
@@ -156,7 +161,7 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
         focusMode={focus}
         onToggleFocus={toggleFocus}
         notesOpen={notesOpen}
-        pageHasNotes={notes.pages.includes(page)}
+        pageHasNotes={notedPageList.includes(page)}
         onToggleNotes={() => setNotesOpen((open) => !open)}
       />
       <div className="flex h-full">
@@ -172,7 +177,7 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
           <PageScrubber
             page={page}
             pageCount={pageCount}
-            markedPages={notes.pages}
+            markedPages={notedPageList}
             visible={chromeVisible}
             onGoTo={goTo}
           />
@@ -180,9 +185,18 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
         {notesOpen && (
           <div className="pt-14">
             <NotesPanel
-              page={page}
               notes={notes}
-              onGoTo={goTo}
+              here={{
+                key: pdfLocation(page),
+                label: `Page ${page}`,
+                notes: notes.notes.filter((n) => pdfPage(n.location) === page),
+                create: (content) => notes.create(pdfLocation(page), null, content),
+              }}
+              prev={pageJump(adjacentNotedPage(notedPageList, page, -1), goTo)}
+              next={pageJump(adjacentNotedPage(notedPageList, page, 1), goTo)}
+              groups={noteGroups}
+              currentGroup={pdfLocation(page)}
+              onOpenGroup={(group) => goTo(pdfPage(group.location) ?? page)}
               onClose={() => setNotesOpen(false)}
             />
           </div>
@@ -190,4 +204,8 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
       </div>
     </div>
   );
+}
+
+function pageJump(page: number | null, goTo: (page: number) => void) {
+  return page === null ? null : { label: `Page ${page}`, go: () => goTo(page) };
 }

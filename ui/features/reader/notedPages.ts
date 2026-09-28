@@ -24,16 +24,3 @@ export function adjacentNotedPage(
   for (let i = pages.length - 1; i >= 0; i--) if (pages[i] < current) return pages[i];
   return null;
 }
-
-/** Notes grouped by page, in page order. */
-export function groupByPage(notes: Note[]): Array<{ page: number; notes: Note[] }> {
-  const groups = new Map<number, Note[]>();
-  for (const [page, note] of withPages(notes)) {
-    const list = groups.get(page) ?? [];
-    list.push(note);
-    groups.set(page, list);
-  }
-  return [...groups.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([page, list]) => ({ page, notes: list }));
-}
