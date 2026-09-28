@@ -4,11 +4,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Book, ZoomMode } from "@/lib/types";
 import { Button } from "@/components/Button";
 import { progressService } from "@/services/progressService";
+import { NotesPanel } from "./NotesPanel";
 import { PageScrubber } from "./PageScrubber";
 import { PageView } from "./PageView";
 import { ReaderToolbar } from "./ReaderToolbar";
 import type { PageRenderer } from "./pageRenderer";
 import { clampPage, stepZoom } from "./readerMath";
+import { useBookNotes } from "./useBookNotes";
 import { useReaderDocument } from "./useReaderDocument";
 
 const CHROME_IDLE_MS = 2500;
@@ -51,7 +53,11 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   const [zoomMode, setZoomMode] = useState<ZoomMode>(book.zoomMode ?? "fit-page");
   const [customZoom, setCustomZoom] = useState(book.zoomLevel ?? 1);
   const [resolvedZoom, setResolvedZoom] = useState(customZoom);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const notes = useBookNotes(book.id);
   const chrome = useChromeVisibility();
+  // While annotating, keep the toolbar in place above the notes panel.
+  const chromeVisible = chrome.visible || notesOpen;
 
   // Autosave: debounced while reading, flushed when leaving or closing the window.
   const saver = useMemo(() => progressService.createSaver(book.id), [book.id]);
@@ -124,6 +130,11 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
           if (withCtrl) return;
           setZoomMode("fit-width");
           break;
+        case "n":
+        case "N":
+          if (withCtrl) return;
+          setNotesOpen((open) => !open);
+          break;
         case "Escape":
           h.back();
           break;
@@ -144,23 +155,44 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
         pageCount={pageCount}
         zoom={resolvedZoom}
         zoomMode={zoomMode}
-        visible={chrome.visible}
+        visible={chromeVisible}
         onBack={back}
         onGoTo={goTo}
         onZoom={zoom}
         onZoomMode={setZoomMode}
+        notesOpen={notesOpen}
+        pageHasNotes={notes.pages.includes(page)}
+        onToggleNotes={() => setNotesOpen((open) => !open)}
       />
-      <main className="h-full" onPointerEnter={chrome.poke}>
-        <PageView
-          renderer={renderer}
-          page={page}
-          zoomMode={zoomMode}
-          customZoom={customZoom}
-          onZoomResolved={setResolvedZoom}
-          onFlip={flip}
-        />
-      </main>
-      <PageScrubber page={page} pageCount={pageCount} visible={chrome.visible} onGoTo={goTo} />
+      <div className="flex h-full">
+        <main className="relative min-w-0 flex-1" onPointerEnter={chrome.poke}>
+          <PageView
+            renderer={renderer}
+            page={page}
+            zoomMode={zoomMode}
+            customZoom={customZoom}
+            onZoomResolved={setResolvedZoom}
+            onFlip={flip}
+          />
+          <PageScrubber
+            page={page}
+            pageCount={pageCount}
+            markedPages={notes.pages}
+            visible={chromeVisible}
+            onGoTo={goTo}
+          />
+        </main>
+        {notesOpen && (
+          <div className="pt-14">
+            <NotesPanel
+              page={page}
+              notes={notes}
+              onGoTo={goTo}
+              onClose={() => setNotesOpen(false)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -5,8 +5,8 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 
 ## Status
 
-**Current phase:** 7 — Notes
-**Next step:** notes commands (list/create/update/delete) + tests, notesStore, NotesPanel in the reader, toolbar dot + scrubber markers, prev/next annotated page, library badge already reads `noteCount`.
+**Current phase:** 8 — Book details + polish
+**Next step:** BookDetailsPage (cover, metadata, progress, notes list, continue reading, remove), error boundary, CSP, a11y pass, perf check with many books.
 
 | # | Phase | Status |
 |---|-------|--------|
@@ -17,7 +17,7 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 | 4 | Library UI: grid, import queue cards, picker + drag-drop, covers, remove dialog | ✅ done |
 | 5 | Reader: `pdfshelf://` range protocol, windowed rendering, nav, zoom, keyboard | ✅ done |
 | 6 | Reading progress: debounced autosave, flush on close, reopen at last page | ✅ done |
-| 7 | Notes: CRUD, panel, indicators, annotated-page navigation | ⏳ |
+| 7 | Notes: CRUD, panel, indicators, annotated-page navigation | ✅ done |
 | 8 | Book details page + polish (states, toasts, a11y, perf) | ⏳ |
 | 9 | Hardening (corrupt/permission/disk full/crash) + `tauri build` | ⏳ |
 
@@ -55,6 +55,7 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 - `services/library.rs` import copy/finalize/abort, soft remove, permanent delete via `.trash-<id>`
 - `services/reconcile.rs` startup repair; `import.rs` worker thread + events `import:progress|copied|failed`
 - `protocol.rs` `pdfshelf://localhost/{book|cover}/<id>` (use `convertFileSrc("book/<id>", "pdfshelf")`)
+- Notes: `services/notes.rs` validates (trimmed, non-empty, ≤ 20k chars, page within 1..pageCount). Commands list_notes, create_note, update_note, delete_note.
 - Commands: list_books, list_removed_books, get_book, import_books, save_cover, finalize_import, abort_import, remove_book, restore_book, delete_book, get_settings, set_setting
 
 - Commits: Conventional Commits, English, local only (never push). **Never add `Co-Authored-By` or any AI attribution.**
