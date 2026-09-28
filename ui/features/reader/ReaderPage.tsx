@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Book, ZoomMode } from "@/lib/types";
 import { Button } from "@/components/Button";
@@ -48,8 +48,10 @@ function isTyping(target: EventTarget | null): boolean {
 
 function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   const navigate = useNavigate();
+  // Callers may open the reader at a specific page (e.g. a note in book details).
+  const requestedPage = (useLocation().state as { page?: number } | null)?.page;
   const pageCount = renderer.pageCount;
-  const [page, setPage] = useState(() => clampPage(book.currentPage, pageCount));
+  const [page, setPage] = useState(() => clampPage(requestedPage ?? book.currentPage, pageCount));
   const [zoomMode, setZoomMode] = useState<ZoomMode>(book.zoomMode ?? "fit-page");
   const [customZoom, setCustomZoom] = useState(book.zoomLevel ?? 1);
   const [resolvedZoom, setResolvedZoom] = useState(customZoom);
