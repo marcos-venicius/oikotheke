@@ -31,6 +31,12 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## README screenshots (2026-09-28)
+
+- `docs/screenshots/*.png` (5 images, ~1.8 MB), captured from a dev build in a scratch XDG dir with a 1440×900 window. Library only with public-domain books: 13 Standard Ebooks EPUBs + *The Prince* printed to PDF from its single-page HTML with `google-chrome --headless=new --no-pdf-header-footer --print-to-pdf`. **Never use the user's books** (or other copyrighted covers) in screenshots.
+- Recipe: import with `OIKOTHEKE_DEV_IMPORT`, resize with `XResizeWindow` (ctypes libX11), drive with the scratch `xt.py` (move/click/key incl. `ctrl+a`/type with Shift), capture with `import -window`, crop empty space, save with `convert -strip -define png:compression-level=9`. The keyboard layout is not US: XTest typing of `'` and `:` produces wrong characters — avoid them in typed text.
+- Theme toggle cycles system → light → dark; the preference persists in the demo DB between runs.
+
 ## EPUB phase 4: notes (2026-09-28)
 
 - `NotesPanel` is format-agnostic: props `here` ({key, label, notes, create}), `prev`/`next` ({label, go} | null), `groups` (`NoteGroup[]`), `currentGroup`, `onOpenGroup`. `useBookNotes` no longer computes PDF pages; `PdfReader` builds its props from `notedPages`/`adjacentNotedPage`, `EpubReader` from CFIs.
