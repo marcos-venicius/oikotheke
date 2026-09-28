@@ -2189,6 +2189,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "oikotheke"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "log",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-log",
+ "tempfile",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2246,23 +2264,6 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
-]
-
-[[package]]
-name = "pdf-shelf"
-version = "0.1.0"
-dependencies = [
- "log",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-log",
- "tempfile",
- "thiserror 2.0.21",
- "uuid",
 ]
 
 [[package]]

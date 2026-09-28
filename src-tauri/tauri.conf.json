@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PDF Shelf",
+  "productName": "Oikotheke",
   "version": "0.1.0",
-  "identifier": "com.pdfshelf.app",
+  "identifier": "io.github.marcos-venicius.oikotheke",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "PDF Shelf",
+        "title": "Oikotheke",
         "width": 1200,
         "height": 800,
         "minWidth": 720,
@@ -24,8 +24,8 @@
         "default-src": "'self'",
         "script-src": "'self' 'wasm-unsafe-eval'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: blob: pdfshelf: http://pdfshelf.localhost",
-        "connect-src": "'self' ipc: http://ipc.localhost pdfshelf: http://pdfshelf.localhost",
+        "img-src": "'self' data: blob: oikotheke: http://oikotheke.localhost",
+        "connect-src": "'self' ipc: http://ipc.localhost oikotheke: http://oikotheke.localhost",
         "worker-src": "'self' blob:",
         "font-src": "'self' data:",
         "object-src": "'none'",

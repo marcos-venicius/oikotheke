@@ -1,4 +1,4 @@
-//! `pdfshelf://` URI scheme serving managed files to the webview:
+//! `oikotheke://` URI scheme serving managed files to the webview:
 //! - `book/<id>`  — the PDF, with HTTP `Range` support so pdf.js reads only what it needs
 //! - `cover/<id>` — the cover image
 //!
@@ -14,7 +14,7 @@ use tauri::{Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 use crate::state::AppState;
 use crate::storage::{BOOK_FILE, COVER_FILE};
 
-pub const SCHEME: &str = "pdfshelf";
+pub const SCHEME: &str = "oikotheke";
 
 /// Upper bound for a single range response, protects against huge requests.
 const MAX_RANGE: u64 = 16 * 1024 * 1024;
@@ -52,7 +52,7 @@ fn respond(state: &AppState, request: &Request<Vec<u8>>) -> HttpResponse {
         Ok(response) => response,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => status(StatusCode::NOT_FOUND),
         Err(err) => {
-            log::error!("pdfshelf protocol: {err}");
+            log::error!("oikotheke protocol: {err}");
             status(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -84,7 +84,7 @@ fn serve_file(path: &PathBuf, range: Option<&str>) -> std::io::Result<HttpRespon
         .header(header::CACHE_CONTROL, "no-cache");
 
     let Some(range) = range else {
-        log::debug!("pdfshelf full read ({} KB) of {:?}", len / 1024, path);
+        log::debug!("oikotheke full read ({} KB) of {:?}", len / 1024, path);
         let mut body = Vec::with_capacity(len as usize);
         file.read_to_end(&mut body)?;
         return Ok(builder.status(StatusCode::OK).body(body).unwrap());
@@ -97,7 +97,7 @@ fn serve_file(path: &PathBuf, range: Option<&str>) -> std::io::Result<HttpRespon
             .unwrap());
     };
     log::debug!(
-        "pdfshelf range {start}-{end} ({} KB) of {:?}",
+        "oikotheke range {start}-{end} ({} KB) of {:?}",
         (end - start + 1) / 1024,
         path.file_name()
     );

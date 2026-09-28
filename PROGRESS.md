@@ -1,4 +1,4 @@
-# PDF Shelf — Progress
+# Oikotheke — Progress
 
 Living log of the v1 implementation. Keep it updated at the end of every work step.
 Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). Everything (code, UI, commits, docs) is in English.
@@ -17,10 +17,10 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 |---|-------|--------|
 | 0 | Scaffold (Tauri 2 + React/TS + Vite, Tailwind, lint, git) | ✅ done |
 | 1 | Persistence core (Rust): errors, db + migrations, storage, repositories | ✅ done |
-| 2 | Library backend: background import, remove/restore/delete, reconcile, `pdfshelf://` protocol | ✅ done |
+| 2 | Library backend: background import, remove/restore/delete, reconcile, `oikotheke://` protocol | ✅ done |
 | 3 | UI shell + light/dark/system theme, router, settings | ✅ done |
 | 4 | Library UI: grid, import queue cards, picker + drag-drop, covers, remove dialog | ✅ done |
-| 5 | Reader: `pdfshelf://` range protocol, windowed rendering, nav, zoom, keyboard | ✅ done |
+| 5 | Reader: `oikotheke://` range protocol, windowed rendering, nav, zoom, keyboard | ✅ done |
 | 6 | Reading progress: debounced autosave, flush on close, reopen at last page | ✅ done |
 | 7 | Notes: CRUD, panel, indicators, annotated-page navigation | ✅ done |
 | 8 | Book details page + polish (states, toasts, a11y, perf) | ✅ done |
@@ -31,11 +31,18 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## Rename to Oikotheke (2026-09-28)
+
+- PDF Shelf → **Oikotheke** (Greek *oîkos* + *thḗkē*, "home shelf"). Identifier `io.github.marcos-venicius.oikotheke` (Tauri identifiers allow `-` but not `_`; a Flathub id would need `marcos_venicius`), binary/crates `oikotheke`/`oikotheke_lib`, scheme `oikotheke://`, DB `oikotheke.db`, theme key `oikotheke:theme` (first launch may flash the default theme until the DB setting loads).
+- `src-tauri/src/legacy.rs` migrates `<data-dir>/com.pdfshelf.app` → new dir and `pdf-shelf.db` → `oikotheke.db`, **before** `tauri::Builder` (log plugin + WebKit create the new dir early); the report is logged in `setup`. The DB is switched to `journal_mode=DELETE` first so WAL-only commits land in the main file; it refuses while another connection is open. `dirs::data_dir()` is the same base Tauri uses for `app_data_dir`.
+- Verified: 7 unit tests (WAL-only data, idempotence, no merge, crash between steps, DB in use) and end-to-end on a copy of the user's real library in scratch XDG dirs (book, cover, 5% progress, light theme preserved; WM class `oikotheke`). Uninstall tested in a scratch prefix (removes old and new launcher files). `install.sh` legacy-launcher cleanup not run (needs a release build).
+- The old installed `pdf-shelf` binary, if launched after migration, starts with an empty library under the legacy id; `install.sh` removes its launcher files.
+
 ## Linux install (2026-09-28)
 
-- `scripts/install.sh` builds (`tauri build --no-bundle`) as the user, then installs binary, hicolor icons (32–512 + scalable SVG) and `pdf-shelf.desktop` into `~/.local` (default), `/usr/local` (`--system`, sudo only for copying) or `--prefix`. `--skip-build` reuses the release binary.
+- `scripts/install.sh` builds (`tauri build --no-bundle`) as the user, then installs binary, hicolor icons (32–512 + scalable SVG) and `oikotheke.desktop` into `~/.local` (default), `/usr/local` (`--system`, sudo only for copying) or `--prefix`. `--skip-build` reuses the release binary.
 - `scripts/uninstall.sh` removes those files (same flags), refuses while the app runs, keeps the library unless `--purge` (typed `delete` confirmation, or `--yes`).
-- Tested in a scratch prefix: desktop entry passes `desktop-file-validate`; window WM class is `pdf-shelf` (matches `StartupWMClass`) and `_NET_WM_ICON` is the new icon. Purge tested only against fake XDG dirs.
+- Tested in a scratch prefix: desktop entry passes `desktop-file-validate`; window WM class is `oikotheke` (matches `StartupWMClass`) and `_NET_WM_ICON` is the new icon. Purge tested only against fake XDG dirs.
 - Icon source: `assets/app-icon.svg`; regenerate with `npx tauri icon assets/app-icon.svg` and delete `src-tauri/icons/{android,ios}`. Preview with the Tauri renderer, not ImageMagick (it mis-renders gradients/transforms).
 - Gotcha: under `set -o pipefail`, `cmd | grep -q` can fail via SIGPIPE; use `grep >/dev/null`.
 
@@ -45,12 +52,12 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - **Frontend folder is `ui/`** (not `src/`), per user request. `index.html` at the root loads `/ui/main.tsx`. Alias `@/` → `ui/`.
 - **Styling:** Tailwind v4 + CSS variable tokens; themes light / dark / system. Minimal, modern look.
 - **Import is non-blocking:** background copy queue in Rust, progress via Tauri events; metadata + cover generated in the background by pdf.js.
-- **Large PDFs:** served via custom `pdfshelf://` scheme with HTTP Range; pdf.js with `disableAutoFetch`/`disableStream`; only current page + next 3 (+ prev 1) rendered, LRU eviction.
+- **Large PDFs:** served via custom `oikotheke://` scheme with HTTP Range; pdf.js with `disableAutoFetch`/`disableStream`; only current page + next 3 (+ prev 1) rendered, LRU eviction.
 - **Integrity:** copy to `library/.staging-<id>` then rename; rows start as `importing`; startup reconcile cleans leftovers; permanent delete goes through `.trash-<id>`.
 - **Remove:** "Remove from library" = soft delete (files kept, restorable). "Delete permanently" = files + notes gone. Never delete without explicit choice.
-- **CSP** (tauri.conf.json): self + `pdfshelf:`/`http://pdfshelf.localhost` for img/connect, `wasm-unsafe-eval` for pdf.js decoders, `unsafe-inline` styles (inline style attributes). Tauri hashes the inline theme script at build time.
+- **CSP** (tauri.conf.json): self + `oikotheke:`/`http://oikotheke.localhost` for img/connect, `wasm-unsafe-eval` for pdf.js decoders, `unsafe-inline` styles (inline style attributes). Tauri hashes the inline theme script at build time.
 - DB paths are stored relative to the app data dir. Timestamps are unix millis (`i64`).
-- **Range loading:** the UI uses pdf.js `PDFDataRangeTransport` (length = `book.fileSize`), fetching `pdfshelf://…/book/<id>` with explicit `Range` headers. The protocol caps a range at 16 MB; a request without `Range` returns the whole file (only meant for covers).
+- **Range loading:** the UI uses pdf.js `PDFDataRangeTransport` (length = `book.fileSize`), fetching `oikotheke://…/book/<id>` with explicit `Range` headers. The protocol caps a range at 16 MB; a request without `Range` returns the whole file (only meant for covers).
 - **Crash-resumable imports:** reconcile keeps `importing` rows whose file exists; the UI must re-run metadata + cover for them on startup. Rows without a file are dropped.
 - **Reader:** `PageRenderer` (ui/features/reader/pageRenderer.ts) renders on demand and `retain()`s only the window (current + next 3 + prev 1, `renderWindow`), cancelling other renders, freeing canvases and calling `page.cleanup()`. Zoom unit: 1 = 100% (render scale = zoom × 96/72). `zoom_mode` column (migration 2): `fit-page` | `fit-width` | `fit-height` | `custom` (+ `zoom_level`). Fit height is literally edge to edge (no vertical padding: page top at y=0, bottom at window height).
 - **Focus mode** (`useFocusMode`): window full screen via `setFullscreen` (needs `core:window:allow-set-fullscreen`); keys F/F11; Esc exits focus before leaving the reader; leaving the reader restores the window if the reader enabled full screen.
@@ -78,7 +85,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - `storage/` layout + `copy_file` (1 MB chunks, fsync) + `write_atomic`; ids validated as UUID
 - `services/library.rs` import copy/finalize/abort, soft remove, permanent delete via `.trash-<id>`
 - `services/reconcile.rs` startup repair; `import.rs` worker thread + events `import:progress|copied|failed`
-- `protocol.rs` `pdfshelf://localhost/{book|cover}/<id>` (use `convertFileSrc("book/<id>", "pdfshelf")`)
+- `protocol.rs` `oikotheke://localhost/{book|cover}/<id>` (use `convertFileSrc("book/<id>", "oikotheke")`)
 - Notes: `services/notes.rs` validates (trimmed, non-empty, ≤ 20k chars, page within 1..pageCount). Commands list_notes, create_note, update_note, delete_note.
 - Commands: list_books, list_removed_books, get_book, import_books, save_cover, finalize_import, abort_import, remove_book, restore_book, delete_book, get_settings, set_setting
 
@@ -87,17 +94,18 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - TS 6: `baseUrl` is deprecated — use relative `paths` only.
 - Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`, `cd src-tauri && cargo test`.
 - First `cargo check` takes ~2 min (webkit2gtk crates).
-- **Manual testing without clicking:** debug builds read `PDF_SHELF_DEV_IMPORT=a.pdf:b.pdf` and queue those files 3 s after startup. Run with `GDK_BACKEND=x11 npm run tauri dev` so the window is an X11 client, then screenshot with `import -window $(xwininfo -root -tree | grep '"PDF Shelf"' | awk '{print $1}') out.png` (root-window capture fails on Wayland). There is no xdotool, so clicks can't be automated.
-- **Driving the UI:** a scratch `xt.py` uses XTest via ctypes (`libXtst.so.6`) to click/press keys relative to the window (the user may be using the app at the same time — check with a screenshot first). Debug builds log every `pdfshelf` range request (`grep "pdfshelf range" dev.log`) to verify partial loading.
-- Stopping the dev app: don't `pkill -f` with a pattern that also matches your own shell command; use `ps -eo pid,args | grep "[t]arget/debug/pdf-shelf"`.
-- Tauri dev restarts the app on every Rust change; with `PDF_SHELF_DEV_IMPORT` set that re-imports (duplicates). Start without it once data exists.
+- **Manual testing without clicking:** debug builds read `OIKOTHEKE_DEV_IMPORT=a.pdf:b.pdf` and queue those files 3 s after startup. Run with `GDK_BACKEND=x11 npm run tauri dev` so the window is an X11 client, then screenshot with `import -window $(xwininfo -root -tree | grep '"Oikotheke"' | awk '{print $1}') out.png` (root-window capture fails on Wayland). There is no xdotool, so clicks can't be automated.
+- **Driving the UI:** a scratch `xt.py` uses XTest via ctypes (`libXtst.so.6`) to click/press keys relative to the window (the user may be using the app at the same time — check with a screenshot first). Debug builds log every `oikotheke` range request (`grep "oikotheke range" dev.log`) to verify partial loading.
+- Stopping the dev app: don't `pkill -f` with a pattern that also matches your own shell command; use `ps -eo pid,args | grep "[t]arget/debug/oikotheke"`.
+- Tauri dev restarts the app on every Rust change; with `OIKOTHEKE_DEV_IMPORT` set that re-imports (duplicates). Start without it once data exists.
 - Test PDFs: generate them (a scratch `genpdf.py` wrote N-page PDFs with optional random filler streams to make ~600 MB files). Never use the user's own PDFs.
-- App data (Linux): `~/.local/share/com.pdfshelf.app/` (`pdf-shelf.db`, `library/`, `logs/`). No `sqlite3` CLI installed.
+- App data (Linux): `~/.local/share/io.github.marcos-venicius.oikotheke/` (`oikotheke.db`, `library/`, `logs/`). No `sqlite3` CLI installed (use Python's `sqlite3` on a *copy*).
+- **The user has a real library (books, progress) in the app-data dir.** Never run the dev app, tests or migrations against it: set `XDG_DATA_HOME`/`XDG_CACHE_HOME`/`XDG_CONFIG_HOME` to a scratch dir, and back it up (`cp -a`, with `-wal`/`-shm`) before anything risky.
 - `public/pdfjs` is generated by `scripts/copy-pdfjs-assets.mjs` (predev/prebuild) and gitignored.
 
 ### Frontend map (`ui/`)
 - `styles/index.css` design tokens (`--bg`, `--surface`, `--surface-2`, `--text`, `--muted`, `--border`, `--accent`, `--danger`, `--reader-bg`) mapped to Tailwind colors (`bg-surface`, `text-muted`, …). Dark = `[data-theme="dark"]` on `<html>`; `dark:` variant is wired to it.
-- `app/theme.tsx` ThemeProvider (preference in DB `settings.theme`, cached in localStorage `pdf-shelf:theme`, applied pre-paint by the inline script in `index.html`).
+- `app/theme.tsx` ThemeProvider (preference in DB `settings.theme`, cached in localStorage `oikotheke:theme`, applied pre-paint by the inline script in `index.html`).
 - `services/ipc.ts` `call()` wraps `invoke` and throws `AppError { kind }`; `describeError()` for user messages.
 - `components/` Button, IconButton, ThemeToggle. `lib/cn.ts` class joiner.
 - Routes (MemoryRouter): `/` library, `/book/:id` details, `/read/:id` reader.

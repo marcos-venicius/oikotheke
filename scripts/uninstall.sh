@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Removes PDF Shelf installed by scripts/install.sh.
+# Removes Oikotheke installed by scripts/install.sh.
 #
 # Usage: scripts/uninstall.sh [--system] [--prefix DIR] [--purge] [--yes]
 #   (default)     remove the per-user install from ~/.local
@@ -11,9 +11,12 @@
 # Without --purge your library is kept, so reinstalling brings everything back.
 set -euo pipefail
 
-APP_ID="pdf-shelf"
-APP_NAME="PDF Shelf"
-BUNDLE_ID="com.pdfshelf.app"
+APP_ID="oikotheke"
+APP_NAME="Oikotheke"
+BUNDLE_ID="io.github.marcos-venicius.oikotheke"
+# Names used before the rename from PDF Shelf; their files are removed too.
+LEGACY_APP_ID="pdf-shelf"
+LEGACY_BUNDLE_ID="com.pdfshelf.app"
 
 PREFIX="$HOME/.local"
 PURGE=0
@@ -38,12 +41,13 @@ done
 
 [[ $EUID -ne 0 ]] || die "run this script as your normal user; it asks for sudo only when needed"
 
-BIN="$PREFIX/bin/$APP_ID"
-DESKTOP="$PREFIX/share/applications/$APP_ID.desktop"
 ICON_DIR="$PREFIX/share/icons/hicolor"
-FILES=("$BIN" "$DESKTOP" "$ICON_DIR/scalable/apps/$APP_ID.svg")
-for size in 32 64 128 256 512; do
-  FILES+=("$ICON_DIR/${size}x${size}/apps/$APP_ID.png")
+FILES=()
+for id in "$APP_ID" "$LEGACY_APP_ID"; do
+  FILES+=("$PREFIX/bin/$id" "$PREFIX/share/applications/$id.desktop" "$ICON_DIR/scalable/apps/$id.svg")
+  for size in 32 64 128 256 512; do
+    FILES+=("$ICON_DIR/${size}x${size}/apps/$id.png")
+  done
 done
 
 SUDO=""
@@ -52,7 +56,7 @@ if [[ -e "$PREFIX" && ! -w "$PREFIX" ]]; then
   SUDO="sudo"
 fi
 
-if pgrep -x "$APP_ID" >/dev/null 2>&1; then
+if pgrep -x "$APP_ID" >/dev/null 2>&1 || pgrep -x "$LEGACY_APP_ID" >/dev/null 2>&1; then
   die "$APP_NAME is running. Close it and try again."
 fi
 
@@ -77,11 +81,14 @@ else
 fi
 
 # User data always lives in the invoking user's XDG directories.
-DATA_DIRS=(
-  "${XDG_DATA_HOME:-$HOME/.local/share}/$BUNDLE_ID"
-  "${XDG_CACHE_HOME:-$HOME/.cache}/$BUNDLE_ID"
-  "${XDG_CONFIG_HOME:-$HOME/.config}/$BUNDLE_ID"
-)
+DATA_DIRS=()
+for id in "$BUNDLE_ID" "$LEGACY_BUNDLE_ID"; do
+  DATA_DIRS+=(
+    "${XDG_DATA_HOME:-$HOME/.local/share}/$id"
+    "${XDG_CACHE_HOME:-$HOME/.cache}/$id"
+    "${XDG_CONFIG_HOME:-$HOME/.config}/$id"
+  )
+done
 EXISTING=()
 for dir in "${DATA_DIRS[@]}"; do
   [[ -e "$dir" ]] && EXISTING+=("$dir")

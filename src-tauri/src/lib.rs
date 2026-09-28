@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod error;
 mod import;
+mod legacy;
 mod models;
 mod protocol;
 mod services;
@@ -15,10 +16,14 @@ use crate::import::ImportQueue;
 use crate::state::AppState;
 use crate::storage::Storage;
 
-const DATABASE_FILE: &str = "pdf-shelf.db";
+const DATABASE_FILE: &str = "oikotheke.db";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // Before the builder: plugins and the webview create the new data dir early.
+    let migration = legacy::migrate(&context.config().identifier, DATABASE_FILE);
+
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -33,7 +38,8 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, protocol::handle)
-        .setup(|app| {
+        .setup(move |app| {
+            migration.log();
             let data_dir = app.path().app_data_dir()?;
             let storage = Storage::new(&data_dir)?;
             let db = Database::open(&data_dir.join(DATABASE_FILE))?;
@@ -70,15 +76,15 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_setting,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 
-/// Debug builds only: `PDF_SHELF_DEV_IMPORT=a.pdf:b.pdf` queues files at startup, to
+/// Debug builds only: `OIKOTHEKE_DEV_IMPORT=a.pdf:b.pdf` queues files at startup, to
 /// exercise imports without the file picker. Delayed so the UI is listening for events.
 #[cfg(debug_assertions)]
 fn dev_import(app: tauri::AppHandle) {
-    let Some(paths) = std::env::var_os("PDF_SHELF_DEV_IMPORT") else {
+    let Some(paths) = std::env::var_os("OIKOTHEKE_DEV_IMPORT") else {
         return;
     };
     std::thread::spawn(move || {

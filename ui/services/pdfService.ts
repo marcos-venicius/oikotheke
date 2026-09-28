@@ -10,7 +10,7 @@ export type PDFDocumentProxy = pdfjs.PDFDocumentProxy;
 export type PDFPageProxy = pdfjs.PDFPageProxy;
 export type PDFLoadingTask = pdfjs.PDFDocumentLoadingTask;
 
-const SCHEME = "pdfshelf";
+const SCHEME = "oikotheke";
 /**
  * pdf.js fetches the file in chunks of this size, only where it needs data. Kept small because
  * opening a document walks the page tree (`checkLastPage`), touching one chunk per page object.

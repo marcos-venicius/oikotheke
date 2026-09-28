@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PDF Shelf</title>
+    <title>Oikotheke</title>
     <script>
       // Apply the cached theme before first paint to avoid a flash.
       (function () {
         var pref = "system";
         try {
-          pref = localStorage.getItem("pdf-shelf:theme") || "system";
+          pref = localStorage.getItem("oikotheke:theme") || "system";
         } catch (e) {}
         var dark =
           pref === "dark" ||

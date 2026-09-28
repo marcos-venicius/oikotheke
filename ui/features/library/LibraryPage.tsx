@@ -200,7 +200,7 @@ function DropOverlay() {
       <div className="flex flex-col items-center gap-3 text-center">
         <FileDown className="size-8 text-accent" strokeWidth={1.5} />
         <p className="text-sm font-medium">Drop PDFs to add them to your library</p>
-        <p className="text-xs text-muted">A copy of each file is kept by PDF Shelf</p>
+        <p className="text-xs text-muted">A copy of each file is kept by Oikotheke</p>
       </div>
     </div>
   );

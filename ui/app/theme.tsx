@@ -10,7 +10,7 @@ import {
 import { settingsService } from "@/services/settingsService";
 import type { ThemePreference } from "@/lib/types";
 
-const STORAGE_KEY = "pdf-shelf:theme";
+const STORAGE_KEY = "oikotheke:theme";
 const SETTING_KEY = "theme";
 
 interface ThemeContextValue {

@@ -1,7 +1,9 @@
-# PDF Shelf
+# Oikotheke
 
-A local-first desktop app to organize, read and annotate your PDFs. Your files, reading
-progress and notes never leave your machine.
+A local-first desktop app to organize, read and annotate your books (PDF today, EPUB planned).
+Your files, reading progress and notes never leave your machine.
+
+The name comes from Greek *oîkos* (home) + *thḗkē* (case, repository): the home shelf.
 
 ## Stack
 
@@ -20,7 +22,7 @@ scripts/install.sh --system     # install for all users (/usr/local, sudo for co
 scripts/install.sh --skip-build # reuse an existing release build
 ```
 
-PDF Shelf then appears in your applications menu. To remove it:
+Oikotheke then appears in your applications menu. To remove it:
 
 ```sh
 scripts/uninstall.sh            # removes the app, keeps your library
@@ -28,7 +30,8 @@ scripts/uninstall.sh --purge    # also deletes stored PDFs, notes and progress (
 ```
 
 Use the same `--system` / `--prefix DIR` flag you installed with. Your library lives in
-`~/.local/share/com.pdfshelf.app`.
+`~/.local/share/io.github.marcos-venicius.oikotheke`. A library from the app's former
+name, PDF Shelf, is moved there automatically on first launch.
 
 ## Development
 

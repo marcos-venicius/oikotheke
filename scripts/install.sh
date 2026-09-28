@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs PDF Shelf on Linux: binary, desktop entry and icons.
+# Installs Oikotheke on Linux: binary, desktop entry and icons.
 #
 # Usage: scripts/install.sh [--system] [--prefix DIR] [--skip-build]
 #   (default)     install for the current user into ~/.local (no sudo needed)
@@ -8,8 +8,10 @@
 #   --skip-build  reuse an existing release binary instead of building
 set -euo pipefail
 
-APP_ID="pdf-shelf"
-APP_NAME="PDF Shelf"
+APP_ID="oikotheke"
+APP_NAME="Oikotheke"
+# Launcher files of the app before it was renamed from PDF Shelf.
+LEGACY_APP_ID="pdf-shelf"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BINARY="$ROOT/src-tauri/target/release/$APP_ID"
 ICONS="$ROOT/src-tauri/icons"
@@ -98,8 +100,8 @@ cat >"$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=$APP_NAME
-GenericName=PDF Library
-Comment=Organize, read and annotate your PDFs locally
+GenericName=Book Library
+Comment=Organize, read and annotate your books locally
 Exec=$BIN_DIR/$APP_ID
 Icon=$APP_ID
 Terminal=false
@@ -110,6 +112,18 @@ StartupNotify=true
 EOF
 $SUDO install -Dm644 "$DESKTOP_FILE" "$APPS_DIR/$APP_ID.desktop"
 
+# Replace the PDF Shelf launcher, if present: the renamed app takes over its library.
+LEGACY_FILES=("$BIN_DIR/$LEGACY_APP_ID" "$APPS_DIR/$LEGACY_APP_ID.desktop" "$ICON_DIR/scalable/apps/$LEGACY_APP_ID.svg")
+for size in "${!SIZES[@]}"; do
+  LEGACY_FILES+=("$ICON_DIR/${size}x${size}/apps/$LEGACY_APP_ID.png")
+done
+for file in "${LEGACY_FILES[@]}"; do
+  if [[ -e "$file" ]]; then
+    info "Removing old PDF Shelf file $file"
+    $SUDO rm -f "$file"
+  fi
+done
+
 # Refresh caches so the launcher and icon show up right away (best effort).
 if command -v update-desktop-database >/dev/null; then
   $SUDO update-desktop-database -q "$APPS_DIR" 2>/dev/null || true
@@ -119,6 +133,7 @@ if command -v gtk-update-icon-cache >/dev/null; then
 fi
 
 info "$APP_NAME installed."
+echo "    An existing PDF Shelf library is moved over automatically on first launch."
 echo "    Launch it from your applications menu, or run: $BIN_DIR/$APP_ID"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
