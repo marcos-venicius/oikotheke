@@ -5,15 +5,15 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 
 ## Status
 
-**Current phase:** 3 — UI shell + theme
-**Next step:** design tokens, ThemeProvider (light/dark/system), router, typed service layer over `invoke`.
+**Current phase:** 4 — Library UI
+**Next step:** library service, import store (events), pdf.js metadata + cover, grid + cards, drag-drop, remove dialog.
 
 | # | Phase | Status |
 |---|-------|--------|
 | 0 | Scaffold (Tauri 2 + React/TS + Vite, Tailwind, lint, git) | ✅ done |
 | 1 | Persistence core (Rust): errors, db + migrations, storage, repositories | ✅ done |
 | 2 | Library backend: background import, remove/restore/delete, reconcile, `pdfshelf://` protocol | ✅ done |
-| 3 | UI shell + light/dark/system theme, router, settings | ⏳ |
+| 3 | UI shell + light/dark/system theme, router, settings | ✅ done |
 | 4 | Library UI: grid, import queue cards, picker + drag-drop, covers, remove dialog | ⏳ |
 | 5 | Reader: `pdfshelf://` range protocol, windowed rendering, nav, zoom, keyboard | ⏳ |
 | 6 | Reading progress: debounced autosave, flush on close, reopen at last page | ⏳ |
@@ -55,3 +55,10 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 - TS 6: `baseUrl` is deprecated — use relative `paths` only.
 - Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`, `cd src-tauri && cargo test`.
 - First `cargo check` takes ~2 min (webkit2gtk crates).
+
+### Frontend map (`ui/`)
+- `styles/index.css` design tokens (`--bg`, `--surface`, `--surface-2`, `--text`, `--muted`, `--border`, `--accent`, `--danger`, `--reader-bg`) mapped to Tailwind colors (`bg-surface`, `text-muted`, …). Dark = `[data-theme="dark"]` on `<html>`; `dark:` variant is wired to it.
+- `app/theme.tsx` ThemeProvider (preference in DB `settings.theme`, cached in localStorage `pdf-shelf:theme`, applied pre-paint by the inline script in `index.html`).
+- `services/ipc.ts` `call()` wraps `invoke` and throws `AppError { kind }`; `describeError()` for user messages.
+- `components/` Button, IconButton, ThemeToggle. `lib/cn.ts` class joiner.
+- Routes (MemoryRouter): `/` library, `/book/:id` details, `/read/:id` reader.
