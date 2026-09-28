@@ -56,3 +56,33 @@ impl Serialize for AppError {
         s.end()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn maps_io_errors_to_kinds() {
+        assert_eq!(
+            AppError::from(Error::from(ErrorKind::StorageFull)).kind(),
+            "diskFull"
+        );
+        assert_eq!(
+            AppError::from(Error::from(ErrorKind::PermissionDenied)).kind(),
+            "permissionDenied"
+        );
+        assert_eq!(
+            AppError::from(Error::from(ErrorKind::NotFound)).kind(),
+            "notFound"
+        );
+        assert_eq!(AppError::from(Error::from(ErrorKind::Other)).kind(), "io");
+    }
+
+    #[test]
+    fn serializes_kind_and_message() {
+        let json = serde_json::to_value(AppError::NotPdf).unwrap();
+        assert_eq!(json["kind"], "notPdf");
+        assert_eq!(json["message"], "The file is not a valid PDF");
+    }
+}

@@ -127,6 +127,8 @@ pub fn delete_permanently(db: &Database, storage: &Storage, id: &str) -> AppResu
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::fs::File;
+
     use super::*;
     use crate::models::BookStatus;
 
@@ -187,6 +189,22 @@ pub(crate) mod tests {
         let (dir, db, storage) = setup();
         let result = copy_into_library(&db, &storage, &dir.path().join("nope.pdf"), |_| {});
         assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn import_of_unreadable_file_fails_cleanly() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, db, storage) = setup();
+        let source = write_pdf(dir.path(), "locked.pdf");
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o000)).unwrap();
+        if File::open(&source).is_ok() {
+            return; // Running as root: permissions are not enforced.
+        }
+        let result = copy_into_library(&db, &storage, &source, |_| {});
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+        assert!(storage.scan().unwrap().is_empty());
+        assert!(books::list_all(&db.conn()).unwrap().is_empty());
     }
 
     #[test]

@@ -5,8 +5,13 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 
 ## Status
 
-**Current phase:** 9 — Hardening
-**Next step:** CSP in tauri.conf.json (verify pdf.js worker/wasm + pdfshelf: + inline theme script in a release build), `tauri build` smoke test (rsvg2 missing?), failure-path checks (permission denied, crash mid-import).
+**Current phase:** v1 complete — awaiting user feedback
+**Next step:** collect feedback from real use. Candidate follow-ups (not started):
+- Continuous-scroll reading mode (virtualized, reusing `PageRenderer`).
+- Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
+- Sort/search on the shelf by title/author.
+- Undo for note deletion; export notes (Markdown).
+- AppImage/RPM bundles (need `rsvg2`/extra deps); app icon design (still Tauri default icons).
 
 | # | Phase | Status |
 |---|-------|--------|
@@ -19,7 +24,12 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 | 6 | Reading progress: debounced autosave, flush on close, reopen at last page | ✅ done |
 | 7 | Notes: CRUD, panel, indicators, annotated-page navigation | ✅ done |
 | 8 | Book details page + polish (states, toasts, a11y, perf) | ✅ done |
-| 9 | Hardening (corrupt/permission/disk full/crash) + `tauri build` | ⏳ |
+| 9 | Hardening (corrupt/permission/disk full/crash) + `tauri build` | ✅ done |
+
+## Verification log (2026-09-28)
+
+- Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
+- Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
 ## Decisions
 
@@ -30,6 +40,7 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 - **Large PDFs:** served via custom `pdfshelf://` scheme with HTTP Range; pdf.js with `disableAutoFetch`/`disableStream`; only current page + next 3 (+ prev 1) rendered, LRU eviction.
 - **Integrity:** copy to `library/.staging-<id>` then rename; rows start as `importing`; startup reconcile cleans leftovers; permanent delete goes through `.trash-<id>`.
 - **Remove:** "Remove from library" = soft delete (files kept, restorable). "Delete permanently" = files + notes gone. Never delete without explicit choice.
+- **CSP** (tauri.conf.json): self + `pdfshelf:`/`http://pdfshelf.localhost` for img/connect, `wasm-unsafe-eval` for pdf.js decoders, `unsafe-inline` styles (inline style attributes). Tauri hashes the inline theme script at build time.
 - DB paths are stored relative to the app data dir. Timestamps are unix millis (`i64`).
 - **Range loading:** the UI uses pdf.js `PDFDataRangeTransport` (length = `book.fileSize`), fetching `pdfshelf://…/book/<id>` with explicit `Range` headers. The protocol caps a range at 16 MB; a request without `Range` returns the whole file (only meant for covers).
 - **Crash-resumable imports:** reconcile keeps `importing` rows whose file exists; the UI must re-run metadata + cover for them on startup. Rows without a file are dropped.
@@ -45,7 +56,8 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 
 - Cover rendering runs on the main thread (canvas); fine for one page, could move to OffscreenCanvas later.
 
-- `rsvg2` system dependency missing (reported by create-tauri-app). Probably only matters for bundling; check in phase 9.
+- `rsvg2` missing: `.deb` bundles fine (`npm run tauri build -- --bundles deb`, 5.6 MB); AppImage not tried.
+- App icons are still the Tauri defaults.
 
 ## Notes for AI
 
