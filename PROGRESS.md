@@ -11,7 +11,7 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 - Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
 - Sort/search on the shelf by title/author.
 - Undo for note deletion; export notes (Markdown).
-- AppImage/RPM bundles (need `rsvg2`/extra deps); app icon design (still Tauri default icons).
+- AppImage/RPM bundles (need `rsvg2`/extra deps).
 
 | # | Phase | Status |
 |---|-------|--------|
@@ -30,6 +30,14 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
+
+## Linux install (2026-09-28)
+
+- `scripts/install.sh` builds (`tauri build --no-bundle`) as the user, then installs binary, hicolor icons (32–512 + scalable SVG) and `pdf-shelf.desktop` into `~/.local` (default), `/usr/local` (`--system`, sudo only for copying) or `--prefix`. `--skip-build` reuses the release binary.
+- `scripts/uninstall.sh` removes those files (same flags), refuses while the app runs, keeps the library unless `--purge` (typed `delete` confirmation, or `--yes`).
+- Tested in a scratch prefix: desktop entry passes `desktop-file-validate`; window WM class is `pdf-shelf` (matches `StartupWMClass`) and `_NET_WM_ICON` is the new icon. Purge tested only against fake XDG dirs.
+- Icon source: `assets/app-icon.svg`; regenerate with `npx tauri icon assets/app-icon.svg` and delete `src-tauri/icons/{android,ios}`. Preview with the Tauri renderer, not ImageMagick (it mis-renders gradients/transforms).
+- Gotcha: under `set -o pipefail`, `cmd | grep -q` can fail via SIGPIPE; use `grep >/dev/null`.
 
 ## Decisions
 
@@ -57,7 +65,6 @@ Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs
 - Cover rendering runs on the main thread (canvas); fine for one page, could move to OffscreenCanvas later.
 
 - `rsvg2` missing: `.deb` bundles fine (`npm run tauri build -- --bundles deb`, 5.6 MB); AppImage not tried.
-- App icons are still the Tauri defaults.
 
 ## Notes for AI
 
