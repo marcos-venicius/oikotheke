@@ -1,4 +1,4 @@
-# PDF Shelf
+# Oikotheke
 
 ## Keeping this file current
 
@@ -10,10 +10,26 @@ from the code. Implementation details, progress and gotchas go in `PROGRESS.md` 
 
 ## Overview
 
-**PDF Shelf** is a desktop application to organize, read and annotate PDF files locally.
+**Oikotheke** is a desktop application to organize, read and annotate books locally. Today it
+supports PDF; EPUB support is specified in [EPUB support](#epub-support-planned) and not yet
+implemented.
 
-It works as a **digital bookshelf**: the user imports PDFs, organizes the library and opens
+It works as a **digital bookshelf**: the user imports books, organizes the library and opens
 any document in a book-like reading experience.
+
+### Name
+
+*Oikotheke* comes from Greek οἶκος (*oîkos*, "house, home") + θήκη (*thḗkē*, "case,
+repository") — the same *thḗkē* as in βιβλιοθήκη, "library". It means "the home shelf": a
+personal library that lives with you. The project was called **PDF Shelf** until the rename.
+
+| Use | Value |
+|---|---|
+| Display name (window, menu, README) | `Oikotheke` |
+| Binary, npm and Cargo package, desktop entry | `oikotheke` |
+| App identifier (sets the app-data dir) | `io.github.marcos-venicius.oikotheke` |
+| Internal URI scheme | `oikotheke://` |
+| Legacy identifier (migrated on startup) | `com.pdfshelf.app` |
 
 The core principle is **local-first**:
 
@@ -23,8 +39,8 @@ The core principle is **local-first**:
 - The application works fully offline.
 
 **Status:** v1 is complete (library, reader, progress, notes, book details, hardening, Linux
-install). EPUB support is being considered as the next feature; it is not designed yet and
-must be specified here before it is implemented.
+install) and renamed to Oikotheke. Next: EPUB support, implemented in the phases described
+below.
 
 ## Goals
 
@@ -124,7 +140,8 @@ The app separates:
 1. **Binary files** — PDFs, covers and other derived assets, on disk.
 2. **Metadata** — books, reading progress, notes and settings, in a SQLite database.
 
-Layout (under the platform app-data dir, e.g. `~/.local/share/com.pdfshelf.app/` on Linux):
+Layout (under the platform app-data dir, e.g.
+`~/.local/share/io.github.marcos-venicius.oikotheke/` on Linux):
 
 ```text
 <app-data>/
@@ -133,12 +150,29 @@ Layout (under the platform app-data dir, e.g. `~/.local/share/com.pdfshelf.app/`
 │       ├── book.pdf
 │       └── cover.jpg
 ├── logs/
-└── pdf-shelf.db
+└── oikotheke.db
 ```
 
 - Paths stored in the database are relative to the app-data dir.
 - Timestamps are Unix milliseconds.
 - Never hardcode OS-specific paths; use the directories provided by the framework.
+
+### Legacy data migration
+
+Users of PDF Shelf have their library under the legacy identifier. On startup, **before Tauri
+initializes** (plugins and the webview create the new data dir early), the app:
+
+1. Renames `<data-dir>/com.pdfshelf.app` to `<data-dir>/<identifier>` — only when the legacy
+   dir exists and the new one does not. It is a single atomic rename; the dirs are never
+   merged and nothing is copied or deleted.
+2. Renames `pdf-shelf.db` to `oikotheke.db` — only when the new file does not exist. The WAL
+   is checkpointed into the main file first (the `-wal` file may hold most recent writes), and
+   the rename happens only if the checkpoint fully succeeds; the emptied legacy `-wal`/`-shm`
+   are removed afterwards.
+
+Both steps are idempotent and safe to interrupt: a crash leaves either the old or the new
+state, and the next start finishes the job. A migration failure is logged and never deletes
+data. This migration stays until all known installs have run it at least once.
 
 ## PDF reader
 
@@ -154,8 +188,8 @@ Opening a book enters a book-like reading experience. The reader:
 
 Reading comfort comes first: keep visible controls to a minimum.
 
-Large files are streamed: the PDF is served through the `pdfshelf://` protocol with HTTP Range
-requests, and only a small window of pages around the current one is rendered.
+Large files are streamed: the PDF is served through the `oikotheke://` protocol with HTTP
+Range requests, and only a small window of pages around the current one is rendered.
 
 ## Reading progress
 
@@ -232,6 +266,83 @@ Key/value pairs (e.g. `theme`: light | dark | system).
 Schema changes go through append-only migrations (`src-tauri/src/db/migrations.rs`); never
 edit an existing migration.
 
+## EPUB support (planned)
+
+Not implemented yet. This section is the agreed design; move each part into the sections above
+as it ships, and delete this section when EPUB is complete.
+
+### Principle
+
+PDF and EPUB share everything except the reader engine: library, storage, import queue,
+removal, reconcile, book details, notes and progress. Format-specific code lives behind
+small interfaces, never as `if (format === …)` scattered across screens.
+
+### Fixed vs reflowable
+
+A PDF has fixed pages. An EPUB reflows: a "page" depends on window size and font size, so page
+numbers are not stable positions. Every position is therefore stored as an opaque
+**location** string, interpreted by the book's format:
+
+| Format | `location` | Shown to the user as |
+|---|---|---|
+| pdf | page number (`"42"`) | "Page 42 of 300" |
+| epub | EPUB CFI (`"epubcfi(/6/14!/4/2/1:0)"`) | chapter title + percentage |
+
+### Data model changes
+
+```text
+Book
+├── format       pdf | epub               (new; existing rows = pdf)
+├── location?    replaces currentPage     (existing rows: currentPage as text)
+├── progress     0..1, for shelf progress bars (existing rows: currentPage / pageCount)
+└── pageCount    PDF only; null for EPUB
+
+Note
+├── location     replaces pageNumber      (existing rows: pageNumber as text)
+└── label        display text, e.g. "Page 42" or a chapter title
+```
+
+Reader view settings become per format: PDF keeps `zoomMode`/`zoomLevel`; EPUB gets font
+size, margins, and paginated vs scrolled flow. The migration must be lossless for existing PDF
+books and notes.
+
+### Import
+
+- Detection by content, not extension: PDF = `%PDF-` signature; EPUB = ZIP whose first entry is
+  an uncompressed `mimetype` containing `application/epub+zip`.
+- Stored as `library/<id>/book.epub`.
+- Title, author and cover come from the package document (OPF); no rendering needed. Books
+  without a cover get the generated placeholder.
+- Invalid or DRM-protected EPUBs are rejected with a clear message and rolled back like corrupt
+  PDFs.
+
+### Reader
+
+- PDF keeps the current pdf.js reader unchanged.
+- EPUB uses [foliate-js](https://github.com/johnfactotum/foliate-js) (MIT, npm `foliate-js`):
+  CFI support, paginated and scrolled layouts, table of contents.
+- Both readers implement the same contract: open at a location, next/previous, go to a
+  location, report location changes (for autosave and notes).
+- EPUB controls: font size, margins, theme (follows the app theme), table of contents,
+  percentage slider. No zoom/fit modes.
+
+### Security and privacy
+
+EPUB content is HTML/CSS and may contain scripts or remote references. EPUB content must never
+run scripts or reach the network: render it in sandboxed iframes and enforce it through CSP.
+Verify both with a hostile test EPUB (inline script, remote image, remote font).
+
+### Phases
+
+Each phase is a separate, releasable change that keeps PDF fully working:
+
+1. **Generalize the model** — `format`, `location`, `progress`, note `location`/`label`,
+   lossless migration. PDF only; no visible change.
+2. **EPUB import** — detection, storage, OPF metadata and cover; EPUBs appear on the shelf.
+3. **EPUB reader** — foliate-js reader, autosave and resume.
+4. **EPUB notes** — create/edit/delete at a location, indicators, navigate annotated
+   locations; the book details page lists them.
+
 ## Data integrity
 
 The database and the files on disk must never disagree — e.g. no book row pointing at a
@@ -300,7 +411,7 @@ Persistence (Rust)
 
 ## Stack
 
-- **Tauri 2** (Rust): storage, SQLite (rusqlite), import queue, `pdfshelf://` protocol.
+- **Tauri 2** (Rust): storage, SQLite (rusqlite), import queue, `oikotheke://` protocol.
 - **React 19 + TypeScript + Vite** in `ui/` (not `src/`); alias `@/` → `ui/`.
 - **Tailwind CSS v4** with CSS-variable design tokens; **pdf.js** for PDF parsing/rendering;
   react-router (MemoryRouter); lucide-react icons.
