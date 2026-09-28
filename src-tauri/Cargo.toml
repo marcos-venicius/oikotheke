@@ -2,7 +2,9 @@
 name = "oikotheke"
 version = "0.1.0"
 description = "Local-first book library and reader"
-authors = []
+authors = ["Marcos Sousa"]
+license = "MIT"
+repository = "https://github.com/marcos-venicius/oikotheke"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

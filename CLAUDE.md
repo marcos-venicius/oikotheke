@@ -515,8 +515,10 @@ tracked in `PROGRESS.md`.
 - Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`,
   `cd src-tauri && cargo test`.
 - Everything (code, UI text, commits, docs) is written in English.
-- Commits: Conventional Commits, local only — **never push**. **Never add `Co-Authored-By`
-  or any AI attribution** to commits or PRs.
+- Commits: Conventional Commits. The repository is `marcos-venicius/oikotheke` (private,
+  GitHub); **push only when the user asks**. **Never add `Co-Authored-By` or any AI
+  attribution** to commits or PRs.
+- License: MIT (`LICENSE`). New dependencies must have a compatible license.
 - Never use the user's own PDFs for testing; generate test files.
 
 ### Guidelines

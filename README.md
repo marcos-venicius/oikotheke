@@ -55,3 +55,7 @@ scripts/    Linux install/uninstall, pdf.js asset copy
 assets/     App icon source (app-icon.svg)
 PROGRESS.md  Implementation progress and development notes
 ```
+
+## License
+
+[MIT](LICENSE) © 2026 Marcos Sousa

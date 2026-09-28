@@ -134,7 +134,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Progress: `services/progress.rs` validates location + progress (0..1) before `db::books::update_progress`.
 - Commands: list_books, list_removed_books, get_book, import_books, save_cover, finalize_import, abort_import, remove_book, restore_book, delete_book, get_settings, set_setting
 
-- Commits: Conventional Commits, English, local only (never push). **Never add `Co-Authored-By` or any AI attribution.**
+- Commits: Conventional Commits, English. Remote `origin` = `marcos-venicius/oikotheke` (private); push only when the user asks. **Never add `Co-Authored-By` or any AI attribution.**
 - Library versions are recent (pdfjs-dist 6, react-router 8, vitest 5, TypeScript 6, ESLint 10): check `node_modules/*/` typings before assuming APIs.
 - TS 6: `baseUrl` is deprecated — use relative `paths` only.
 - Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`, `cd src-tauri && cargo test`.
