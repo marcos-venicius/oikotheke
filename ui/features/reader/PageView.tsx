@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 import type { PageRenderer } from "./pageRenderer";
 import { fitZoom, renderWindow, type Size } from "./readerMath";
 
+/** Space around the page. Fit height uses none vertically: the page spans the full window height. */
 const PADDING = 32;
 const WHEEL_THRESHOLD = 60;
 const FLIP_COOLDOWN = 350;
@@ -28,7 +29,15 @@ export function PageView({
 }: PageViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState<Size>({ width: 0, height: 0 });
+  // Outer size of the scroll area (padding included). The padding depends on the zoom mode and
+  // WebKitGTK doesn't report padding-only changes to ResizeObserver, so it's subtracted here.
+  const [outer, setOuter] = useState<Size>({ width: 0, height: 0 });
+  const padX = PADDING;
+  const padY = zoomMode === "fit-height" ? 0 : PADDING;
+  const box: Size = {
+    width: Math.max(0, outer.width - padX * 2),
+    height: Math.max(0, outer.height - padY * 2),
+  };
   const [pageSize, setPageSize] = useState<{ page: number; size: Size } | null>(null);
   const [loading, setLoading] = useState(false);
   const [failedKey, setFailedKey] = useState<string | null>(null);
@@ -37,12 +46,9 @@ export function PageView({
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setBox({
-        width: Math.max(0, width - PADDING * 2),
-        height: Math.max(0, height - PADDING * 2),
-      });
+    const observer = new ResizeObserver(() => {
+      // clientWidth/Height include padding and exclude scrollbars.
+      setOuter({ width: el.clientWidth, height: el.clientHeight });
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -138,8 +144,12 @@ export function PageView({
     <div
       ref={scrollRef}
       onWheel={onWheel}
-      className="scrollbar-thin relative h-full overflow-auto bg-reader"
-      style={{ padding: PADDING }}
+      className={cn(
+        "scrollbar-thin relative h-full overflow-auto bg-reader",
+        // Fitted pages never need vertical scrolling; this also absorbs sub-pixel rounding.
+        (zoomMode === "fit-page" || zoomMode === "fit-height") && "overflow-y-hidden",
+      )}
+      style={{ padding: `${padY}px ${padX}px` }}
     >
       <div className="flex min-h-full min-w-fit items-center justify-center">
         <div

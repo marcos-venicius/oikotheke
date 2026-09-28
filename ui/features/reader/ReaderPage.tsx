@@ -11,6 +11,7 @@ import { ReaderToolbar } from "./ReaderToolbar";
 import type { PageRenderer } from "./pageRenderer";
 import { clampPage, stepZoom } from "./readerMath";
 import { useBookNotes } from "./useBookNotes";
+import { useFocusMode } from "./useFocusMode";
 import { useReaderDocument } from "./useReaderDocument";
 
 const CHROME_IDLE_MS = 2500;
@@ -58,6 +59,7 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   const [notesOpen, setNotesOpen] = useState(false);
   const notes = useBookNotes(book.id);
   const chrome = useChromeVisibility();
+  const { focus, setFocusMode } = useFocusMode();
   // While annotating, keep the toolbar in place above the notes panel.
   const chromeVisible = chrome.visible || notesOpen;
 
@@ -91,10 +93,16 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
     [resolvedZoom],
   );
   const back = useCallback(() => navigate("/"), [navigate]);
+  const toggleFocus = useCallback(() => setFocusMode(!focus), [focus, setFocusMode]);
+  // Esc leaves focus mode first, then the reader.
+  const escape = useCallback(
+    () => (focus ? setFocusMode(false) : back()),
+    [focus, setFocusMode, back],
+  );
 
-  const handlers = useRef({ flip, goTo, zoom, back });
+  const handlers = useRef({ flip, goTo, zoom, escape, toggleFocus });
   useLayoutEffect(() => {
-    handlers.current = { flip, goTo, zoom, back };
+    handlers.current = { flip, goTo, zoom, escape, toggleFocus };
   });
 
   useEffect(() => {
@@ -132,13 +140,26 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
           if (withCtrl) return;
           setZoomMode("fit-width");
           break;
+        case "h":
+        case "H":
+          if (withCtrl) return;
+          setZoomMode("fit-height");
+          break;
+        case "f":
+        case "F":
+          if (withCtrl) return;
+          h.toggleFocus();
+          break;
+        case "F11":
+          h.toggleFocus();
+          break;
         case "n":
         case "N":
           if (withCtrl) return;
           setNotesOpen((open) => !open);
           break;
         case "Escape":
-          h.back();
+          h.escape();
           break;
         default:
           return;
@@ -162,6 +183,8 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
         onGoTo={goTo}
         onZoom={zoom}
         onZoomMode={setZoomMode}
+        focusMode={focus}
+        onToggleFocus={toggleFocus}
         notesOpen={notesOpen}
         pageHasNotes={notes.pages.includes(page)}
         onToggleNotes={() => setNotesOpen((open) => !open)}

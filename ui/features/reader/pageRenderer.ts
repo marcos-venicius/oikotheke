@@ -79,8 +79,9 @@ export class PageRenderer {
       const canvas = document.createElement("canvas");
       canvas.width = Math.floor(viewport.width * dpr);
       canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
+      // Exact CSS size, so fitted pages meet the window edges without a gap.
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
       const task = page.render({
         canvas,
         viewport,

@@ -31,5 +31,11 @@ describe("readerMath", () => {
     const box = { width: 600 * CSS_UNITS, height: 400 * CSS_UNITS };
     expect(fitZoom(page, box, "fit-width")).toBeCloseTo(1);
     expect(fitZoom(page, box, "fit-page")).toBeCloseTo(0.5);
+    expect(fitZoom(page, box, "fit-height")).toBeCloseTo(0.5);
+    // A wide box: fit height is the larger zoom, fit page takes the smaller one.
+    const wide = { width: 1200 * CSS_UNITS, height: 400 * CSS_UNITS };
+    expect(fitZoom(page, wide, "fit-height")).toBeCloseTo(0.5);
+    expect(fitZoom(page, wide, "fit-width")).toBeCloseTo(2);
+    expect(fitZoom(page, wide, "fit-page")).toBeCloseTo(0.5);
   });
 });

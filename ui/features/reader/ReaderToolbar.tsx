@@ -4,8 +4,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Maximize,
+  Minimize,
   MoveHorizontal,
+  MoveVertical,
   NotebookPen,
+  RectangleVertical,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -24,11 +27,13 @@ interface ReaderToolbarProps {
   notesOpen?: boolean;
   pageHasNotes?: boolean;
   visible: boolean;
+  focusMode: boolean;
   onBack: () => void;
   onGoTo: (page: number) => void;
   onZoom: (direction: 1 | -1) => void;
   onZoomMode: (mode: Exclude<ZoomMode, "custom">) => void;
   onToggleNotes?: () => void;
+  onToggleFocus: () => void;
 }
 
 const icon = "size-[18px]";
@@ -91,7 +96,7 @@ export function ReaderToolbar(props: ReaderToolbarProps) {
           active={zoomMode === "fit-page"}
           onClick={() => props.onZoomMode("fit-page")}
         >
-          <Maximize className={icon} strokeWidth={1.75} />
+          <RectangleVertical className={icon} strokeWidth={1.75} />
         </IconButton>
         <IconButton
           label="Fit width (W)"
@@ -99,6 +104,24 @@ export function ReaderToolbar(props: ReaderToolbarProps) {
           onClick={() => props.onZoomMode("fit-width")}
         >
           <MoveHorizontal className={icon} strokeWidth={1.75} />
+        </IconButton>
+        <IconButton
+          label="Fit height (H)"
+          active={zoomMode === "fit-height"}
+          onClick={() => props.onZoomMode("fit-height")}
+        >
+          <MoveVertical className={icon} strokeWidth={1.75} />
+        </IconButton>
+        <IconButton
+          label={props.focusMode ? "Exit focus mode (F)" : "Focus mode: full screen (F)"}
+          active={props.focusMode}
+          onClick={props.onToggleFocus}
+        >
+          {props.focusMode ? (
+            <Minimize className={icon} strokeWidth={1.75} />
+          ) : (
+            <Maximize className={icon} strokeWidth={1.75} />
+          )}
         </IconButton>
         <span className="mx-1 h-5 w-px bg-border" />
         {props.onToggleNotes && (

@@ -46,7 +46,8 @@ export function stepZoom(current: number, direction: 1 | -1): number {
 export function fitZoom(page: Size, box: Size, mode: Exclude<ZoomMode, "custom">): number {
   if (page.width <= 0 || page.height <= 0 || box.width <= 0 || box.height <= 0) return 1;
   const byWidth = box.width / (page.width * CSS_UNITS);
+  const byHeight = box.height / (page.height * CSS_UNITS);
   const zoom =
-    mode === "fit-width" ? byWidth : Math.min(byWidth, box.height / (page.height * CSS_UNITS));
+    mode === "fit-width" ? byWidth : mode === "fit-height" ? byHeight : Math.min(byWidth, byHeight);
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }

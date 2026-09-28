@@ -1,6 +1,6 @@
 export type BookStatus = "importing" | "ready" | "missing";
 
-export type ZoomMode = "fit-page" | "fit-width" | "custom";
+export type ZoomMode = "fit-page" | "fit-width" | "fit-height" | "custom";
 
 export interface Book {
   id: string;
