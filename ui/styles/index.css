@@ -46,8 +46,10 @@
   --color-accent-fg: var(--accent-fg);
   --color-danger: var(--danger);
   --color-reader: var(--reader-bg);
-  --shadow-soft: 0 1px 2px rgb(var(--shadow-color) / 0.06), 0 4px 14px rgb(var(--shadow-color) / 0.08);
-  --shadow-lift: 0 2px 4px rgb(var(--shadow-color) / 0.08), 0 12px 32px rgb(var(--shadow-color) / 0.16);
+  --shadow-soft:
+    0 1px 2px rgb(var(--shadow-color) / 0.06), 0 4px 14px rgb(var(--shadow-color) / 0.08);
+  --shadow-lift:
+    0 2px 4px rgb(var(--shadow-color) / 0.08), 0 12px 32px rgb(var(--shadow-color) / 0.16);
 }
 
 @layer base {

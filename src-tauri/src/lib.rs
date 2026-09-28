@@ -20,6 +20,11 @@ const DATABASE_FILE: &str = "pdf-shelf.db";
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, protocol::handle)
         .setup(|app| {
@@ -36,6 +41,8 @@ pub fn run() {
                 storage,
                 imports,
             });
+            #[cfg(debug_assertions)]
+            dev_import(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -54,4 +61,18 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Debug builds only: `PDF_SHELF_DEV_IMPORT=a.pdf:b.pdf` queues files at startup, to
+/// exercise imports without the file picker. Delayed so the UI is listening for events.
+#[cfg(debug_assertions)]
+fn dev_import(app: tauri::AppHandle) {
+    let Some(paths) = std::env::var_os("PDF_SHELF_DEV_IMPORT") else {
+        return;
+    };
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let paths = std::env::split_paths(&paths).collect();
+        app.state::<AppState>().imports.enqueue(paths);
+    });
 }

@@ -1,4 +1,12 @@
-import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { settingsService } from "@/services/settingsService";
 import type { ThemePreference } from "@/lib/types";
 

@@ -12,7 +12,10 @@ export function ThemeToggle() {
   const Icon = icons[preference];
   const next = order[(order.indexOf(preference) + 1) % order.length];
   return (
-    <IconButton label={`Theme: ${preference} (switch to ${next})`} onClick={() => setPreference(next)}>
+    <IconButton
+      label={`Theme: ${preference} (switch to ${next})`}
+      onClick={() => setPreference(next)}
+    >
       <Icon className="size-[18px]" strokeWidth={1.75} />
     </IconButton>
   );
