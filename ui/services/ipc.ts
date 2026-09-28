@@ -2,7 +2,9 @@ import { invoke, type InvokeArgs, type InvokeOptions } from "@tauri-apps/api/cor
 
 export type AppErrorKind =
   | "notFound"
-  | "notPdf"
+  | "unsupportedFormat"
+  | "unreadable"
+  | "drm"
   | "permissionDenied"
   | "diskFull"
   | "invalid"
@@ -33,8 +35,12 @@ export class AppError extends Error {
 export function describeError(error: unknown): string {
   const err = AppError.from(error);
   switch (err.kind) {
-    case "notPdf":
-      return "This file is not a valid PDF.";
+    case "unsupportedFormat":
+      return "This file is not a PDF or EPUB.";
+    case "unreadable":
+      return "This book is damaged or can't be read.";
+    case "drm":
+      return "This book is protected by DRM and can't be imported.";
     case "permissionDenied":
       return "Permission denied while reading or writing the file.";
     case "diskFull":

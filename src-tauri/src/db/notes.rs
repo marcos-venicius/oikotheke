@@ -87,6 +87,7 @@ mod tests {
             &db.conn(),
             &books::NewBook {
                 id: "b",
+                format: crate::models::BookFormat::Pdf,
                 title: "t",
                 file_path: "p",
                 file_size: 1,

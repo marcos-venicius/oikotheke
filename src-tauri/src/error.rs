@@ -7,8 +7,12 @@ pub type AppResult<T> = Result<T, AppError>;
 pub enum AppError {
     #[error("Not found: {0}")]
     NotFound(String),
-    #[error("The file is not a valid PDF")]
-    NotPdf,
+    #[error("The file is not a PDF or EPUB")]
+    UnsupportedFormat,
+    #[error("The book is damaged or can't be read ({0})")]
+    Unreadable(String),
+    #[error("The book is protected by DRM")]
+    Drm,
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
     #[error("Not enough disk space")]
@@ -25,7 +29,9 @@ impl AppError {
     pub fn kind(&self) -> &'static str {
         match self {
             AppError::NotFound(_) => "notFound",
-            AppError::NotPdf => "notPdf",
+            AppError::UnsupportedFormat => "unsupportedFormat",
+            AppError::Unreadable(_) => "unreadable",
+            AppError::Drm => "drm",
             AppError::PermissionDenied(_) => "permissionDenied",
             AppError::DiskFull => "diskFull",
             AppError::Invalid(_) => "invalid",
@@ -81,8 +87,8 @@ mod tests {
 
     #[test]
     fn serializes_kind_and_message() {
-        let json = serde_json::to_value(AppError::NotPdf).unwrap();
-        assert_eq!(json["kind"], "notPdf");
-        assert_eq!(json["message"], "The file is not a valid PDF");
+        let json = serde_json::to_value(AppError::UnsupportedFormat).unwrap();
+        assert_eq!(json["kind"], "unsupportedFormat");
+        assert_eq!(json["message"], "The file is not a PDF or EPUB");
     }
 }

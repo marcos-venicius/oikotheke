@@ -9,6 +9,7 @@ import {
 import type { Book } from "@/lib/types";
 import { Menu, type MenuItem } from "@/components/Menu";
 import { cn } from "@/lib/cn";
+import { formatLabel } from "@/lib/location";
 import { BookCover } from "./BookCover";
 
 interface BookCardProps {
@@ -96,7 +97,11 @@ export function BookCard({
             {book.title}
           </p>
           <p className="mt-0.5 truncate text-xs text-muted">
-            {[book.author, progress > 0 ? `${Math.round(progress * 100)}%` : "New"]
+            {[
+              book.author,
+              book.format !== "pdf" && formatLabel(book.format),
+              progress > 0 ? `${Math.round(progress * 100)}%` : "New",
+            ]
               .filter(Boolean)
               .join(" · ")}
           </p>

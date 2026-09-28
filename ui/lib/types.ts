@@ -44,6 +44,12 @@ export interface BookMetadata {
   pageCount: number;
 }
 
+export interface EpubMetadata {
+  title: string | null;
+  author: string | null;
+  hasCover: boolean;
+}
+
 export interface ImportJob {
   jobId: string;
   fileName: string;

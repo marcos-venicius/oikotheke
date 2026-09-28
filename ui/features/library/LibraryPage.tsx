@@ -30,7 +30,7 @@ async function pickFiles() {
   const selected = await open({
     multiple: true,
     directory: false,
-    filters: [{ name: "PDF documents", extensions: ["pdf", "PDF"] }],
+    filters: [{ name: "Books (PDF, EPUB)", extensions: ["pdf", "PDF", "epub", "EPUB"] }],
   });
   if (selected) await importPaths(selected);
 }
@@ -183,12 +183,12 @@ function EmptyState({ onImport }: { onImport: () => void }) {
       </div>
       <h2 className="mt-5 text-base font-semibold tracking-tight">Your shelf is empty</h2>
       <p className="mt-1.5 max-w-xs text-sm text-muted">
-        Import PDFs or drop them anywhere in this window. Files are copied and stay on this
-        computer.
+        Import PDF or EPUB books, or drop them anywhere in this window. Files are copied and stay on
+        this computer.
       </p>
       <Button variant="primary" className="mt-6" onClick={onImport}>
         <Plus className="size-4" strokeWidth={2} />
-        Import PDFs
+        Import books
       </Button>
     </div>
   );
@@ -199,7 +199,7 @@ function DropOverlay() {
     <div className="pointer-events-none fixed inset-3 z-40 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent bg-bg/85 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-3 text-center">
         <FileDown className="size-8 text-accent" strokeWidth={1.5} />
-        <p className="text-sm font-medium">Drop PDFs to add them to your library</p>
+        <p className="text-sm font-medium">Drop PDF or EPUB books to add them to your library</p>
         <p className="text-xs text-muted">A copy of each file is kept by Oikotheke</p>
       </div>
     </div>

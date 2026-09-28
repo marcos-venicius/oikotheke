@@ -5,8 +5,8 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 ## Status
 
-**Current phase:** EPUB support (plan in `CLAUDE.md`) — phase 1 (format-independent locations) done
-**Next step:** EPUB phase 2 (import: detection, OPF metadata, cover). Other candidate follow-ups (not started):
+**Current phase:** EPUB support (plan in `CLAUDE.md`) — phases 1 (locations) and 2 (import) done
+**Next step:** EPUB phase 3 (foliate-js reader, autosave and resume). Other candidate follow-ups (not started):
 - Continuous-scroll reading mode (virtualized, reusing `PageRenderer`).
 - Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
 - Sort/search on the shelf by title/author.
@@ -30,6 +30,16 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
+
+## EPUB phase 2: import (2026-09-28)
+
+- `src-tauri/src/epub.rs` (deps: `zip` 8 with only `deflate-flate2-zlib-rs`, `quick-xml` 0.42 — already in the tree): `is_epub` (ZIP magic + `mimetype` entry, position/compression not checked: the user's real EPUB has `EPUB/` as first entry), `read_package` (container → OPF → dc:title, dc:creator ×3, cover via `cover-image` → EPUB2 `<meta name="cover">` → id/file name containing "cover"), `read_cover`. Caps: XML entries 4 MB, cover 20 MB. DRM = `rights.xml` or a non-font-obfuscation `EncryptionMethod`. Truncated OPFs are rejected (depth check + root must be `package`; quick-xml doesn't error on unclosed tags at EOF).
+- quick-xml 0.42 API: names are `&str` (`local_name().as_ref()`), text via `xml10_content()`, entities arrive as separate `Event::GeneralRef`, attribute values via `normalized_value(XmlVersion::Implicit1_0)`.
+- Storage: `book_file(format)` → `book.pdf`/`book.epub`; `detect_format`. Protocol `book/<id>` resolves the file through the DB row. Errors: `unsupportedFormat` (was `notPdf`), `unreadable`, `drm`.
+- Commands `read_epub_metadata` → `{ title?, author?, hasCover }`, `read_epub_cover` → raw bytes (`ipc::Response`). UI `importService.extractBook` dispatches per format; EPUB covers are decoded with `createImageBitmap` and re-encoded to JPEG (`services/coverImage.ts`, shared with pdf.js covers). `finalize_import` requires `pageCount ≥ 1` for PDF and `0` for EPUB, and strips control characters from title/author (found a real `"regression\0"` PDF title from ImageMagick; `pickTitle` cleans too).
+- Reader: EPUB books show "Reading EPUB books is not available yet." (`useReaderDocument`).
+- Verified: 54 Rust + 25 vitest (incl. `importService.test.ts` for EPUB extraction/error mapping); end-to-end in scratch XDG dirs with a copy of the user's real library + the user's EPUB ("Build Your Own Database From Scratch in Go": title, "James Smith", PNG cover → JPEG, "EPUB" label), a PDF (regression), a DRM EPUB and a broken EPUB (both rolled back, no rows/dirs left). Not seen on screen: the book details page for an EPUB, and failure toasts — `OIKOTHEKE_DEV_IMPORT` bypasses the UI job list, so failures of dev-queued imports are silent (real picker/drop imports register jobs).
+- The user's sample EPUB sits untracked in the repo root — never commit it.
 
 ## EPUB phase 1: locations (2026-09-28)
 
@@ -105,7 +115,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`, `cd src-tauri && cargo test`.
 - First `cargo check` takes ~2 min (webkit2gtk crates).
 - **Manual testing without clicking:** debug builds read `OIKOTHEKE_DEV_IMPORT=a.pdf:b.pdf` and queue those files 3 s after startup. Run with `GDK_BACKEND=x11 npm run tauri dev` so the window is an X11 client, then screenshot with `import -window $(xwininfo -root -tree | grep '"Oikotheke"' | awk '{print $1}') out.png` (root-window capture fails on Wayland). There is no xdotool, so clicks can't be automated.
-- **Driving the UI:** a scratch `xt.py` uses XTest via ctypes (`libXtst.so.6`) to click/move/press keys/type relative to the window (the first click may only focus the window; click again) (the user may be using the app at the same time — check with a screenshot first). Debug builds log every `oikotheke` range request (`grep "oikotheke range" dev.log`) to verify partial loading.
+- **Driving the UI:** match the main window by size (`grep ' 1200x'`) — tooltips are also X windows titled "Oikotheke". A scratch `xt.py` uses XTest via ctypes (`libXtst.so.6`) to click/move/press keys/type relative to the window (the first click may only focus the window; click again) (the user may be using the app at the same time — check with a screenshot first). Debug builds log every `oikotheke` range request (`grep "oikotheke range" dev.log`) to verify partial loading.
 - Stopping the dev app: don't `pkill -f` with a pattern that also matches your own shell command; use `ps -eo pid,args | grep "[t]arget/debug/oikotheke"`.
 - Tauri dev restarts the app on every Rust change; with `OIKOTHEKE_DEV_IMPORT` set that re-imports (duplicates). Start without it once data exists.
 - Test PDFs: generate them (a scratch `genpdf.py` wrote N-page PDFs with optional random filler streams to make ~600 MB files). Never use the user's own PDFs.

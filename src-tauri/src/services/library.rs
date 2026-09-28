@@ -6,9 +6,10 @@ use std::fs;
 use std::path::Path;
 
 use crate::db::{books, Database};
+use crate::epub;
 use crate::error::{AppError, AppResult};
-use crate::models::{new_id, Book, BookMetadata};
-use crate::storage::{self, Storage, BOOK_FILE, COVER_FILE};
+use crate::models::{new_id, Book, BookFormat, BookMetadata, EpubMetadata};
+use crate::storage::{self, Storage, COVER_FILE};
 
 /// Copy stage of an import: validates the source, copies it into managed storage and
 /// registers the book as `importing`. Metadata and cover are added by `finalize_import`.
@@ -18,10 +19,10 @@ pub fn copy_into_library(
     source: &Path,
     on_progress: impl FnMut(u64),
 ) -> AppResult<Book> {
-    let meta = fs::metadata(source)?;
-    if !meta.is_file() || !storage::is_pdf(source)? {
-        return Err(AppError::NotPdf);
+    if !fs::metadata(source)?.is_file() {
+        return Err(AppError::UnsupportedFormat);
     }
+    let format = storage::detect_format(source)?.ok_or(AppError::UnsupportedFormat)?;
 
     let id = new_id();
     let staging = storage.staging_dir(&id)?;
@@ -29,7 +30,8 @@ pub fn copy_into_library(
 
     let copied = (|| {
         fs::create_dir_all(&staging)?;
-        let size = storage::copy_file(source, &staging.join(BOOK_FILE), on_progress)?;
+        let target = staging.join(storage::book_file(format));
+        let size = storage::copy_file(source, &target, on_progress)?;
         fs::rename(&staging, &final_dir)?;
         Ok::<_, AppError>(size)
     })();
@@ -47,8 +49,9 @@ pub fn copy_into_library(
         .unwrap_or_else(|| "Untitled".into());
     let new_book = books::NewBook {
         id: &id,
+        format,
         title: &title,
-        file_path: &Storage::book_rel(&id),
+        file_path: &Storage::book_rel(&id, format),
         file_size: size as i64,
     };
     let conn = db.conn();
@@ -74,22 +77,26 @@ pub fn finalize_import(
     id: &str,
     meta: &BookMetadata,
 ) -> AppResult<Book> {
-    if meta.page_count < 1 {
+    let format = books::get(&db.conn(), id)?.format;
+    let pages_ok = match format {
+        BookFormat::Pdf => meta.page_count >= 1,
+        BookFormat::Epub => meta.page_count == 0,
+    };
+    if !pages_ok {
         return Err(AppError::Invalid("page count".into()));
     }
-    let title = meta.title.trim();
+    let title = clean_text(&meta.title);
     let meta = BookMetadata {
         title: if title.is_empty() {
             "Untitled".into()
         } else {
-            title.to_owned()
+            title
         },
         author: meta
             .author
             .as_deref()
-            .map(str::trim)
-            .filter(|a| !a.is_empty())
-            .map(Into::into),
+            .map(clean_text)
+            .filter(|a| !a.is_empty()),
         page_count: meta.page_count,
     };
     let has_cover = storage.book_dir(id)?.join(COVER_FILE).is_file();
@@ -99,7 +106,41 @@ pub fn finalize_import(
     books::get(&conn, id)
 }
 
-/// Undoes an import whose PDF turned out to be unreadable.
+/// Embedded metadata may carry control characters (e.g. a trailing NUL); drop them and collapse
+/// whitespace.
+fn clean_text(value: &str) -> String {
+    value
+        .split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The managed copy of an EPUB book.
+fn epub_path(db: &Database, storage: &Storage, id: &str) -> AppResult<std::path::PathBuf> {
+    let book = books::get(&db.conn(), id)?;
+    if book.format != BookFormat::Epub {
+        return Err(AppError::Invalid(format!("book {id} is not an EPUB")));
+    }
+    Ok(storage.resolve(&book.file_path))
+}
+
+/// Title, author and cover presence of an EPUB, read from its package document.
+pub fn epub_metadata(db: &Database, storage: &Storage, id: &str) -> AppResult<EpubMetadata> {
+    let package = epub::read_package(&epub_path(db, storage, id)?)?;
+    Ok(EpubMetadata {
+        has_cover: package.has_cover(),
+        title: package.title,
+        author: package.author,
+    })
+}
+
+/// The cover image of an EPUB as stored in the book, if any. The UI turns it into `cover.jpg`.
+pub fn epub_cover(db: &Database, storage: &Storage, id: &str) -> AppResult<Option<Vec<u8>>> {
+    epub::read_cover(&epub_path(db, storage, id)?)
+}
+
+/// Undoes an import whose book turned out to be unreadable.
 pub fn abort_import(db: &Database, storage: &Storage, id: &str) -> AppResult<()> {
     delete_permanently(db, storage, id)
 }
@@ -159,8 +200,8 @@ pub(crate) mod tests {
 
         save_cover(&storage, &book.id, b"jpeg").unwrap();
         let meta = BookMetadata {
-            title: " Clean Code ".into(),
-            author: Some("".into()),
+            title: " Clean\u{0}  Code\u{0} ".into(),
+            author: Some("\u{0}".into()),
             page_count: 3,
         };
         let book = finalize_import(&db, &storage, &book.id, &meta).unwrap();
@@ -168,6 +209,67 @@ pub(crate) mod tests {
         assert_eq!(book.title, "Clean Code");
         assert_eq!(book.author, None);
         assert!(book.cover_path.is_some());
+        assert_eq!(book.format, BookFormat::Pdf);
+        assert!(book.file_path.ends_with("/book.pdf"));
+    }
+
+    #[test]
+    fn imports_epubs_without_page_counts() {
+        let (dir, db, storage) = setup();
+        let package = crate::epub::tests::opf(
+            "<dc:title>Dune</dc:title><dc:creator>Frank Herbert</dc:creator>",
+            r#"<item id="c" href="c.jpg" media-type="image/jpeg" properties="cover-image"/>"#,
+        );
+        let source = crate::epub::tests::write_epub(
+            dir.path(),
+            "dune (1).epub",
+            &package,
+            &[("OEBPS/c.jpg", b"jpeg")],
+        );
+
+        let book = copy_into_library(&db, &storage, &source, |_| {}).unwrap();
+        assert_eq!(book.format, BookFormat::Epub);
+        assert!(book.file_path.ends_with("/book.epub"));
+        assert!(storage.resolve(&book.file_path).is_file());
+
+        let meta = epub_metadata(&db, &storage, &book.id).unwrap();
+        assert_eq!(meta.title.as_deref(), Some("Dune"));
+        assert_eq!(meta.author.as_deref(), Some("Frank Herbert"));
+        assert!(meta.has_cover);
+        assert_eq!(
+            epub_cover(&db, &storage, &book.id).unwrap().as_deref(),
+            Some(&b"jpeg"[..])
+        );
+
+        let with_pages = |page_count| BookMetadata {
+            title: "Dune".into(),
+            author: None,
+            page_count,
+        };
+        assert!(matches!(
+            finalize_import(&db, &storage, &book.id, &with_pages(10)),
+            Err(AppError::Invalid(_))
+        ));
+        let ready = finalize_import(&db, &storage, &book.id, &with_pages(0)).unwrap();
+        assert_eq!(ready.status, BookStatus::Ready);
+        assert_eq!(ready.page_count, 0);
+    }
+
+    #[test]
+    fn epub_reads_reject_pdf_books() {
+        let (dir, db, storage) = setup();
+        let book =
+            copy_into_library(&db, &storage, &write_pdf(dir.path(), "a.pdf"), |_| {}).unwrap();
+        assert!(matches!(
+            epub_metadata(&db, &storage, &book.id),
+            Err(AppError::Invalid(_))
+        ));
+        let no_pages = BookMetadata {
+            title: "a".into(),
+            author: None,
+            page_count: 0,
+        };
+        assert!(finalize_import(&db, &storage, &book.id, &no_pages).is_err());
     }
 
     #[test]
@@ -178,7 +280,7 @@ pub(crate) mod tests {
 
         assert!(matches!(
             copy_into_library(&db, &storage, &source, |_| {}),
-            Err(AppError::NotPdf)
+            Err(AppError::UnsupportedFormat)
         ));
         assert!(storage.scan().unwrap().is_empty());
         assert!(books::list_all(&db.conn()).unwrap().is_empty());

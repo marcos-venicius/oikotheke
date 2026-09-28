@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod epub;
 mod error;
 mod import;
 mod legacy;
@@ -63,6 +64,8 @@ pub fn run() {
             commands::library::get_book,
             commands::library::import_books,
             commands::library::save_cover,
+            commands::library::read_epub_metadata,
+            commands::library::read_epub_cover,
             commands::library::finalize_import,
             commands::library::abort_import,
             commands::library::remove_book,

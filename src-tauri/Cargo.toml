@@ -28,6 +28,8 @@ uuid = { version = "1", features = ["v4"] }
 thiserror = "2"
 log = "0.4"
 dirs = "7"
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+quick-xml = "0.42"
 
 [dev-dependencies]
 tempfile = "3"

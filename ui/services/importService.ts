@@ -1,6 +1,8 @@
-import type { Book } from "@/lib/types";
+import type { Book, BookFormat, BookMetadata } from "@/lib/types";
 import { createStore } from "@/lib/store";
-import { describeError } from "./ipc";
+import { imageToCover } from "./coverImage";
+import { epubService } from "./epubService";
+import { AppError, describeError } from "./ipc";
 import { libraryService } from "./libraryService";
 import { openDocument, readMetadata, renderCover } from "./pdfService";
 
@@ -40,9 +42,69 @@ function fail(jobId: string, error: string) {
   window.setTimeout(() => removeJob(jobId), 6000);
 }
 
+/** The book can't be imported; the copy is rolled back and the message shown. */
+export class UnreadableBook extends Error {}
+
+export interface Extracted {
+  metadata: BookMetadata;
+  /** JPEG thumbnail, or null when the book has none (the shelf shows a placeholder). */
+  cover: Uint8Array | null;
+}
+
+/** A missing cover is never fatal. */
+async function optionalCover(render: () => Promise<Uint8Array>): Promise<Uint8Array | null> {
+  try {
+    return await render();
+  } catch (error) {
+    console.warn("cover generation failed", error);
+    return null;
+  }
+}
+
+async function extractPdf(book: Book): Promise<Extracted> {
+  const task = openDocument(book);
+  try {
+    const doc = await task.promise.catch(() => {
+      throw new UnreadableBook("This PDF is damaged or can't be read.");
+    });
+    return {
+      metadata: await readMetadata(doc, book.title),
+      cover: await optionalCover(() => renderCover(doc)),
+    };
+  } finally {
+    await task.destroy();
+  }
+}
+
+async function extractEpub(book: Book): Promise<Extracted> {
+  const meta = await epubService.readMetadata(book.id).catch((error) => {
+    const err = AppError.from(error);
+    if (err.kind === "drm" || err.kind === "unreadable") {
+      throw new UnreadableBook(describeError(err));
+    }
+    throw err;
+  });
+  return {
+    metadata: { title: meta.title ?? book.title, author: meta.author, pageCount: 0 },
+    cover: meta.hasCover
+      ? await optionalCover(async () => imageToCover(await epubService.readCover(book.id)))
+      : null,
+  };
+}
+
+const extractors: Record<BookFormat, (book: Book) => Promise<Extracted>> = {
+  pdf: extractPdf,
+  epub: extractEpub,
+};
+
+/** Metadata and cover of a copied book, read the way its format requires. */
+export function extractBook(book: Book): Promise<Extracted> {
+  return extractors[book.format](book);
+}
+
 /**
- * Second import stage, run in the background one book at a time: read metadata and render
- * the cover with pdf.js, then mark the book ready. Unreadable PDFs are rolled back.
+ * Second import stage, run in the background one book at a time: read metadata and make the
+ * cover, then mark the book ready. Unreadable books are rolled back.
  */
 function process(jobId: string, book: Book) {
   if (processing.has(book.id)) return;
@@ -50,31 +112,28 @@ function process(jobId: string, book: Book) {
   updateJob(jobId, { stage: "processing" });
 
   chain = chain.then(async () => {
-    const task = openDocument(book);
     try {
-      let doc;
+      let extracted;
       try {
-        doc = await task.promise;
-      } catch {
+        extracted = await extractBook(book);
+      } catch (error) {
+        if (!(error instanceof UnreadableBook)) throw error;
         await libraryService.abortImport(book.id).catch(() => {});
-        fail(jobId, "This PDF is damaged or can't be read.");
+        fail(jobId, error.message);
         return;
       }
-      const metadata = await readMetadata(doc, book.title);
-      try {
-        await libraryService.saveCover(book.id, await renderCover(doc));
-      } catch (error) {
-        // A missing cover is not fatal; the shelf shows a placeholder.
-        console.warn("cover generation failed", error);
+      if (extracted.cover) {
+        await libraryService
+          .saveCover(book.id, extracted.cover)
+          .catch((error) => console.warn("saving cover failed", error));
       }
-      const ready = await libraryService.finalizeImport(book.id, metadata);
+      const ready = await libraryService.finalizeImport(book.id, extracted.metadata);
       removeJob(jobId);
       readyListeners.forEach((cb) => cb(ready));
     } catch (error) {
       fail(jobId, describeError(error));
     } finally {
       processing.delete(book.id);
-      await task.destroy();
     }
   });
 }

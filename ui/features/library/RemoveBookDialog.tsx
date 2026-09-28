@@ -39,7 +39,7 @@ export function RemoveBookDialog({
     {
       value: "permanent",
       title: "Delete permanently",
-      description: `Deletes the stored PDF copy, its cover, reading progress${
+      description: `Deletes the stored copy of the book, its cover, reading progress${
         book?.noteCount ? ` and ${plural(book.noteCount, "note")}` : ""
       }. This can't be undone.`,
     },

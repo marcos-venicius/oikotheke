@@ -1,4 +1,4 @@
-//! Managed file storage: `<app-data>/library/<book-id>/{book.pdf, cover.jpg}`.
+//! Managed file storage: `<app-data>/library/<book-id>/{book.pdf|book.epub, cover.jpg}`.
 //!
 //! Paths persisted in the database are relative to the app data root and always use `/`.
 
@@ -6,10 +6,11 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
+use crate::epub;
 use crate::error::{AppError, AppResult};
+use crate::models::BookFormat;
 
 pub const LIBRARY_DIR: &str = "library";
-pub const BOOK_FILE: &str = "book.pdf";
 pub const COVER_FILE: &str = "cover.jpg";
 const STAGING_PREFIX: &str = ".staging-";
 const TRASH_PREFIX: &str = ".trash-";
@@ -30,15 +31,15 @@ impl Storage {
         self.root.join(LIBRARY_DIR)
     }
 
-    /// Resolves a stored relative path (`library/<id>/book.pdf`) to an absolute one.
+    /// Resolves a stored relative path (`library/<id>/book.epub`) to an absolute one.
     pub fn resolve(&self, relative: &str) -> PathBuf {
         relative
             .split('/')
             .fold(self.root.clone(), |acc, part| acc.join(part))
     }
 
-    pub fn book_rel(id: &str) -> String {
-        format!("{LIBRARY_DIR}/{id}/{BOOK_FILE}")
+    pub fn book_rel(id: &str, format: BookFormat) -> String {
+        format!("{LIBRARY_DIR}/{id}/{}", book_file(format))
     }
 
     pub fn cover_rel(id: &str) -> String {
@@ -104,8 +105,27 @@ pub fn validate_id(id: &str) -> AppResult<&str> {
     Ok(id)
 }
 
+/// Name of the managed copy inside a book directory.
+pub fn book_file(format: BookFormat) -> &'static str {
+    match format {
+        BookFormat::Pdf => "book.pdf",
+        BookFormat::Epub => "book.epub",
+    }
+}
+
+/// Identifies a supported book by its content, never by its extension.
+pub fn detect_format(path: &Path) -> AppResult<Option<BookFormat>> {
+    if is_pdf(path)? {
+        return Ok(Some(BookFormat::Pdf));
+    }
+    if epub::is_epub(path)? {
+        return Ok(Some(BookFormat::Epub));
+    }
+    Ok(None)
+}
+
 /// PDF files start with `%PDF-`; the spec tolerates leading junk within the first 1024 bytes.
-pub fn is_pdf(path: &Path) -> AppResult<bool> {
+fn is_pdf(path: &Path) -> AppResult<bool> {
     let mut head = Vec::with_capacity(1024);
     File::open(path)?.take(1024).read_to_end(&mut head)?;
     Ok(head.windows(5).any(|w| w == b"%PDF-"))
@@ -157,14 +177,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn detects_pdf_header() {
+    fn detects_formats_by_content() {
         let dir = tempfile::tempdir().unwrap();
-        let pdf = dir.path().join("a.pdf");
-        let txt = dir.path().join("a.txt");
+        // Extensions are deliberately misleading.
+        let pdf = dir.path().join("a.epub");
+        let txt = dir.path().join("a.pdf");
         fs::write(&pdf, b"%PDF-1.7\n...").unwrap();
         fs::write(&txt, b"hello").unwrap();
-        assert!(is_pdf(&pdf).unwrap());
-        assert!(!is_pdf(&txt).unwrap());
+        let epub = epub::tests::write_epub(dir.path(), "b.pdf", &epub::tests::opf("", ""), &[]);
+        assert_eq!(detect_format(&pdf).unwrap(), Some(BookFormat::Pdf));
+        assert_eq!(detect_format(&epub).unwrap(), Some(BookFormat::Epub));
+        assert_eq!(detect_format(&txt).unwrap(), None);
     }
 
     #[test]
@@ -193,7 +216,7 @@ mod tests {
     fn resolves_relative_paths() {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path()).unwrap();
-        let path = storage.resolve(&Storage::book_rel("abc"));
+        let path = storage.resolve(&Storage::book_rel("abc", BookFormat::Pdf));
         assert_eq!(
             path,
             dir.path().join("library").join("abc").join("book.pdf")

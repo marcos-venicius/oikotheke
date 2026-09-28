@@ -49,6 +49,13 @@ pub enum BookFormat {
 }
 
 impl BookFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BookFormat::Pdf => "pdf",
+            BookFormat::Epub => "epub",
+        }
+    }
+
     pub fn parse(value: &str) -> Self {
         match value {
             "epub" => BookFormat::Epub,
@@ -99,13 +106,24 @@ pub struct Note {
     pub updated_at: i64,
 }
 
-/// Metadata extracted by the UI (pdf.js) to complete an import.
+/// Metadata extracted by the UI to complete an import (pdf.js for PDF, `read_epub_metadata`
+/// for EPUB).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookMetadata {
     pub title: String,
     pub author: Option<String>,
+    /// PDF: at least 1. EPUB: 0 (reflowable books have no fixed pages).
     pub page_count: i64,
+}
+
+/// What the UI needs from an EPUB to complete its import.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EpubMetadata {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub has_cover: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

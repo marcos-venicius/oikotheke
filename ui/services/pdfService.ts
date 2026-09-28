@@ -2,6 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { Book, BookMetadata } from "@/lib/types";
+import { canvasToJpeg, COVER_WIDTH } from "./coverImage";
 import { pickAuthor, pickTitle } from "./pdfTitle";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -18,7 +19,6 @@ const SCHEME = "oikotheke";
 const RANGE_CHUNK = 64 * 1024;
 /** Must stay below the backend's per-response cap (16 MB). */
 const MAX_FETCH = 8 * 1024 * 1024;
-const COVER_WIDTH = 480;
 const ASSETS = new URL("/pdfjs/", window.location.href).href;
 
 export function bookUrl(id: string): string {
@@ -109,12 +109,7 @@ export async function renderCover(doc: PDFDocumentProxy): Promise<Uint8Array> {
     canvas.width = Math.round(viewport.width);
     canvas.height = Math.round(viewport.height);
     await page.render({ canvas, viewport }).promise;
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.85),
-    );
-    canvas.width = canvas.height = 0;
-    if (!blob) throw new Error("Could not encode cover");
-    return new Uint8Array(await blob.arrayBuffer());
+    return await canvasToJpeg(canvas);
   } finally {
     page.cleanup();
   }

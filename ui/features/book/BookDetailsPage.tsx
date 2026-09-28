@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, BookOpen, CircleAlert, Trash2 } from "lucide-react";
 import type { Book, Note } from "@/lib/types";
 import { formatBytes, formatDate, formatRelative, plural } from "@/lib/format";
-import { pdfPage } from "@/lib/location";
+import { describePosition, formatLabel } from "@/lib/location";
 import { Button, IconButton } from "@/components/Button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { toast } from "@/components/toast";
@@ -110,7 +110,8 @@ function Details({
   const groups = useMemo(() => groupByPage(notes), [notes]);
   const readable = book.status === "ready" && book.removedAt === null;
   const facts = [
-    ["Pages", String(book.pageCount)],
+    ["Format", formatLabel(book.format)],
+    ...(book.pageCount > 0 ? [["Pages", String(book.pageCount)]] : []),
     ["Size", formatBytes(book.fileSize)],
     ["Added", formatDate(book.createdAt)],
     ["Last activity", formatRelative(book.updatedAt)],
@@ -129,7 +130,7 @@ function Details({
 
           {book.status === "missing" && (
             <p className="mt-4 inline-flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm text-danger">
-              <CircleAlert className="size-4" /> The stored copy of this PDF is missing.
+              <CircleAlert className="size-4" /> The stored copy of this book is missing.
             </p>
           )}
 
@@ -144,11 +145,7 @@ function Details({
 
           <div className="mt-6 max-w-md">
             <div className="flex justify-between text-xs text-muted">
-              <span>
-                {progress > 0
-                  ? `Page ${pdfPage(book.location) ?? 1} of ${book.pageCount}`
-                  : "Not started"}
-              </span>
+              <span>{progress > 0 ? describePosition(book) : "Not started"}</span>
               <span>{Math.round(progress * 100)}%</span>
             </div>
             <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-2">

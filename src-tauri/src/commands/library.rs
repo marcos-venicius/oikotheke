@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::State;
 
 use crate::db::books;
 use crate::error::{AppError, AppResult};
 use crate::import::ImportJob;
-use crate::models::{Book, BookMetadata};
+use crate::models::{Book, BookMetadata, EpubMetadata};
 use crate::services::library;
 use crate::state::AppState;
 
@@ -29,6 +29,19 @@ pub fn get_book(state: State<AppState>, id: String) -> AppResult<Book> {
 #[tauri::command]
 pub fn import_books(state: State<AppState>, paths: Vec<PathBuf>) -> Vec<ImportJob> {
     state.imports.enqueue(paths)
+}
+
+#[tauri::command]
+pub fn read_epub_metadata(state: State<AppState>, id: String) -> AppResult<EpubMetadata> {
+    library::epub_metadata(&state.db, &state.storage, &id)
+}
+
+/// Raw-body response: the cover image bytes as stored in the EPUB.
+#[tauri::command]
+pub fn read_epub_cover(state: State<AppState>, id: String) -> AppResult<Response> {
+    let cover = library::epub_cover(&state.db, &state.storage, &id)?
+        .ok_or_else(|| AppError::NotFound(format!("cover of book {id}")))?;
+    Ok(Response::new(cover))
 }
 
 /// Raw-body command: the request body is the JPEG bytes, the book id comes in a header.

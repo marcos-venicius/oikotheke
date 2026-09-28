@@ -10,9 +10,9 @@ from the code. Implementation details, progress and gotchas go in `PROGRESS.md` 
 
 ## Overview
 
-**Oikotheke** is a desktop application to organize, read and annotate books locally. Today it
-supports PDF; EPUB support is specified in [EPUB support](#epub-support-planned) and not yet
-implemented.
+**Oikotheke** is a desktop application to organize, read and annotate books locally. It reads and
+annotates PDF; EPUB books can be imported, and reading them is in progress (see
+[EPUB support](#epub-support-planned)).
 
 It works as a **digital bookshelf**: the user imports books, organizes the library and opens
 any document in a book-like reading experience.
@@ -104,23 +104,32 @@ The layout must feel like a library, not a plain file list.
 
 ### Import
 
-Users import PDFs through:
+Users import PDF and EPUB books through:
 
 - A file picker.
 - Drag and drop, where the platform supports it.
 
 Import flow:
 
-1. Validate the file is a PDF (`%PDF-` signature within the first 1024 bytes).
+1. Detect the format by content, never by extension: PDF = `%PDF-` signature within the first
+   1024 bytes; EPUB = ZIP with a `mimetype` entry containing `application/epub+zip` (its
+   position and compression are not checked — real files often break that rule).
 2. Generate a unique book id (UUID).
-3. Copy the file to `library/.staging-<id>/` on a background worker, reporting progress.
+3. Copy the file to `library/.staging-<id>/book.<pdf|epub>` on a background worker, reporting
+   progress.
 4. Atomically move it into `library/<id>/` and create the book row with status `importing`.
-5. Extract metadata (title, author, page count) with pdf.js.
-6. Render a cover (`cover.jpg`) from the first page, when possible.
-7. Mark the book `ready` and show it in the library.
+5. Extract metadata per format — PDF: title, author and page count with pdf.js; EPUB: title,
+   author and cover image from the package document (OPF), read by the backend (`epub.rs`).
+6. Make a JPEG cover (`cover.jpg`, 480 px wide at most) — PDF: render page 1; EPUB: re-encode
+   the declared cover image. A missing cover is never fatal.
+7. Clean the metadata (control characters, whitespace) and mark the book `ready`.
 
-Import must handle large files and never load a whole PDF into memory unnecessarily. The UI
-must never block while files are copied.
+Damaged books are rolled back with a clear message. EPUBs protected by DRM (`rights.xml`, or
+any `encryption.xml` algorithm other than font obfuscation) are rejected the same way.
+
+Import must handle large files and never load a whole book into memory unnecessarily (EPUB
+reads touch only the ZIP directory and small, size-capped entries). The UI must never block
+while files are copied.
 
 ### Removal
 
@@ -147,7 +156,7 @@ Layout (under the platform app-data dir, e.g.
 <app-data>/
 ├── library/
 │   └── <book-id>/
-│       ├── book.pdf
+│       ├── book.pdf | book.epub
 │       └── cover.jpg
 ├── logs/
 └── oikotheke.db
@@ -293,7 +302,7 @@ edit an existing migration. Migration 3 replaced `books.current_page` and
 
 ## EPUB support (planned)
 
-Not implemented yet, except the format-independent model (phase 1). This section is the agreed
+Phases 1 (format-independent model) and 2 (import) are done; reading and notes are not. This section is the agreed
 design; move each part into the sections above as it ships, and delete this section when EPUB
 is complete.
 
@@ -305,16 +314,6 @@ small interfaces, never as `if (format === …)` scattered across screens.
 
 Reader view settings are per format: PDF keeps `zoomMode`/`zoomLevel`; EPUB gets font size,
 margins, and paginated vs scrolled flow (new columns when phase 3 needs them).
-
-### Import
-
-- Detection by content, not extension: PDF = `%PDF-` signature; EPUB = ZIP whose first entry is
-  an uncompressed `mimetype` containing `application/epub+zip`.
-- Stored as `library/<id>/book.epub`.
-- Title, author and cover come from the package document (OPF); no rendering needed. Books
-  without a cover get the generated placeholder.
-- Invalid or DRM-protected EPUBs are rejected with a clear message and rolled back like corrupt
-  PDFs.
 
 ### Reader
 
@@ -338,7 +337,8 @@ Each phase is a separate, releasable change that keeps PDF fully working:
 
 1. ✅ **Generalize the model** — `format`, `location`, `progress`, note `location`/`label`,
    lossless migration. PDF only; no visible change.
-2. **EPUB import** — detection, storage, OPF metadata and cover; EPUBs appear on the shelf.
+2. ✅ **EPUB import** — detection, storage, OPF metadata and cover; EPUBs appear on the shelf
+   (opening one shows "not available yet" until phase 3).
 3. **EPUB reader** — foliate-js reader, autosave and resume.
 4. **EPUB notes** — create/edit/delete at a location, indicators, navigate annotated
    locations; the book details page lists them.

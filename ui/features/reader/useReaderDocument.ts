@@ -10,7 +10,7 @@ type State =
   | { status: "error"; message: string }
   | { status: "ready"; book: Book; renderer: PageRenderer };
 
-/** Loads the book and opens its PDF once for the whole reading session. */
+/** Loads the book and opens its document once for the whole reading session. */
 export function useReaderDocument(bookId: string): State {
   // Tagged with the book it belongs to, so switching books shows "loading" without a reset.
   const [state, setState] = useState<State & { bookId?: string }>({ status: "loading" });
@@ -24,6 +24,8 @@ export function useReaderDocument(bookId: string): State {
       try {
         const book = await libraryService.getBook(bookId);
         if (book.status === "missing") throw new Error("The stored copy of this book is missing.");
+        // EPUB reading arrives in the next phase (see CLAUDE.md).
+        if (book.format !== "pdf") throw new Error("Reading EPUB books is not available yet.");
         task = openDocument(book);
         const doc = await task.promise;
         if (!active) return;

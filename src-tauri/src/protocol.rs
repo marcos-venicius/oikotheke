@@ -1,18 +1,20 @@
 //! `oikotheke://` URI scheme serving managed files to the webview:
-//! - `book/<id>`  — the PDF, with HTTP `Range` support so pdf.js reads only what it needs
+//! - `book/<id>`  — the book file (PDF or EPUB), with HTTP `Range` support so readers fetch
+//!   only what they need
 //! - `cover/<id>` — the cover image
 //!
 //! Only files inside managed storage are reachable (ids are validated as UUIDs).
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 
+use crate::db::books;
 use crate::state::AppState;
-use crate::storage::{BOOK_FILE, COVER_FILE};
+use crate::storage::COVER_FILE;
 
 pub const SCHEME: &str = "oikotheke";
 
@@ -62,24 +64,29 @@ fn respond(state: &AppState, request: &Request<Vec<u8>>) -> HttpResponse {
 fn resolve(state: &AppState, raw_path: &str) -> Option<PathBuf> {
     let path = percent_decode(raw_path.trim_start_matches('/'));
     let (kind, id) = path.split_once('/')?;
-    let file = match kind {
-        "book" => BOOK_FILE,
-        "cover" => COVER_FILE,
-        _ => return None,
-    };
-    Some(state.storage.book_dir(id).ok()?.join(file))
+    match kind {
+        "book" => {
+            let book = books::get(&state.db.conn(), id).ok()?;
+            Some(state.storage.resolve(&book.file_path))
+        }
+        "cover" => Some(state.storage.book_dir(id).ok()?.join(COVER_FILE)),
+        _ => None,
+    }
+}
+
+fn content_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("pdf") => "application/pdf",
+        Some("epub") => "application/epub+zip",
+        _ => "image/jpeg",
+    }
 }
 
 fn serve_file(path: &PathBuf, range: Option<&str>) -> std::io::Result<HttpResponse> {
     let mut file = File::open(path)?;
     let len = file.metadata()?.len();
-    let content_type = if path.ends_with(BOOK_FILE) {
-        "application/pdf"
-    } else {
-        "image/jpeg"
-    };
     let builder = with_cors(Response::builder())
-        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CONTENT_TYPE, content_type(path))
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CACHE_CONTROL, "no-cache");
 
@@ -200,11 +207,21 @@ mod tests {
     #[test]
     fn serves_partial_content() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(BOOK_FILE);
+        let path = dir.path().join("book.pdf");
         std::fs::write(&path, b"0123456789").unwrap();
         let response = serve_file(&path, Some("bytes=2-5")).unwrap();
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body(), b"2345");
         assert_eq!(response.headers()[header::CONTENT_RANGE], "bytes 2-5/10");
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "application/pdf");
+    }
+
+    #[test]
+    fn content_type_follows_the_file() {
+        assert_eq!(
+            content_type(Path::new("x/book.epub")),
+            "application/epub+zip"
+        );
+        assert_eq!(content_type(Path::new("x/cover.jpg")), "image/jpeg");
     }
 }

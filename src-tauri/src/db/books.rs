@@ -34,6 +34,7 @@ fn from_row(row: &Row) -> rusqlite::Result<Book> {
 
 pub struct NewBook<'a> {
     pub id: &'a str,
+    pub format: BookFormat,
     pub title: &'a str,
     pub file_path: &'a str,
     pub file_size: i64,
@@ -42,9 +43,16 @@ pub struct NewBook<'a> {
 pub fn insert_importing(conn: &Connection, book: &NewBook) -> AppResult<()> {
     let now = now_ms();
     conn.execute(
-        "INSERT INTO books (id, title, file_path, file_size, status, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 'importing', ?5, ?5)",
-        params![book.id, book.title, book.file_path, book.file_size, now],
+        "INSERT INTO books (id, format, title, file_path, file_size, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'importing', ?6, ?6)",
+        params![
+            book.id,
+            book.format.as_str(),
+            book.title,
+            book.file_path,
+            book.file_size,
+            now
+        ],
     )?;
     Ok(())
 }
@@ -156,6 +164,7 @@ mod tests {
             conn,
             &NewBook {
                 id,
+                format: BookFormat::Pdf,
                 title: "draft",
                 file_path: "library/x/book.pdf",
                 file_size: 10,
