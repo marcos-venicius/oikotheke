@@ -1,4 +1,4 @@
-//! Managed file storage: `<app-data>/library/<book-id>/{book.pdf, cover.png}`.
+//! Managed file storage: `<app-data>/library/<book-id>/{book.pdf, cover.jpg}`.
 //!
 //! Paths persisted in the database are relative to the app data root and always use `/`.
 
@@ -10,7 +10,7 @@ use crate::error::{AppError, AppResult};
 
 pub const LIBRARY_DIR: &str = "library";
 pub const BOOK_FILE: &str = "book.pdf";
-pub const COVER_FILE: &str = "cover.png";
+pub const COVER_FILE: &str = "cover.jpg";
 const STAGING_PREFIX: &str = ".staging-";
 const TRASH_PREFIX: &str = ".trash-";
 const COPY_CHUNK: usize = 1024 * 1024;

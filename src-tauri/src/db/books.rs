@@ -169,7 +169,7 @@ mod tests {
             author: Some("Bob".into()),
             page_count: 400,
         };
-        finalize(&conn, "a", &meta, Some("library/a/cover.png")).unwrap();
+        finalize(&conn, "a", &meta, Some("library/a/cover.jpg")).unwrap();
         let book = get(&conn, "a").unwrap();
         assert_eq!(book.status, BookStatus::Ready);
         assert_eq!(book.title, "Clean Code");
