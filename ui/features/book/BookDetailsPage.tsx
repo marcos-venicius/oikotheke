@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, BookOpen, CircleAlert, Trash2 } from "lucide-react";
 import type { Book, Note } from "@/lib/types";
-import { formatBytes, formatDate, formatRelative, plural, readingProgress } from "@/lib/format";
+import { formatBytes, formatDate, formatRelative, plural } from "@/lib/format";
+import { pdfPage } from "@/lib/location";
 import { Button, IconButton } from "@/components/Button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { toast } from "@/components/toast";
@@ -105,7 +106,7 @@ function Details({
   onRead: (page?: number) => void;
   onRemove: () => void;
 }) {
-  const progress = readingProgress(book);
+  const progress = book.progress;
   const groups = useMemo(() => groupByPage(notes), [notes]);
   const readable = book.status === "ready" && book.removedAt === null;
   const facts = [
@@ -144,7 +145,9 @@ function Details({
           <div className="mt-6 max-w-md">
             <div className="flex justify-between text-xs text-muted">
               <span>
-                {progress > 0 ? `Page ${book.currentPage} of ${book.pageCount}` : "Not started"}
+                {progress > 0
+                  ? `Page ${pdfPage(book.location) ?? 1} of ${book.pageCount}`
+                  : "Not started"}
               </span>
               <span>{Math.round(progress * 100)}%</span>
             </div>

@@ -1,11 +1,14 @@
-//! Page notes. Validation lives here; persistence in `db::notes`.
+//! Notes at a reading location. Validation lives here; persistence in `db::notes`.
 
 use crate::db::{books, notes, Database};
 use crate::error::{AppError, AppResult};
 use crate::models::Note;
+use crate::services::location;
 
 /// Generous cap to keep a runaway paste from bloating the database.
 const MAX_NOTE_LEN: usize = 20_000;
+/// Labels are short display text such as a chapter title.
+const MAX_LABEL_LEN: usize = 200;
 
 fn validate_content(content: &str) -> AppResult<&str> {
     let content = content.trim();
@@ -18,14 +21,33 @@ fn validate_content(content: &str) -> AppResult<&str> {
     Ok(content)
 }
 
-pub fn create(db: &Database, book_id: &str, page_number: i64, content: &str) -> AppResult<Note> {
+/// Blank labels are dropped; overlong ones are cut rather than rejected.
+fn normalize_label(label: Option<&str>) -> Option<String> {
+    let label = label?.trim();
+    (!label.is_empty()).then(|| label.chars().take(MAX_LABEL_LEN).collect())
+}
+
+pub fn create(
+    db: &Database,
+    book_id: &str,
+    location: &str,
+    label: Option<&str>,
+    content: &str,
+) -> AppResult<Note> {
     let content = validate_content(content)?;
     let conn = db.conn();
     let book = books::get(&conn, book_id)?;
-    if page_number < 1 || (book.page_count > 0 && page_number > book.page_count) {
-        return Err(AppError::Invalid(format!("page {page_number}")));
-    }
-    notes::insert(&conn, book_id, page_number, content)
+    let location = location::validate(&book, location)?;
+    let label = normalize_label(label);
+    notes::insert(
+        &conn,
+        &notes::NewNote {
+            book_id,
+            location: &location,
+            label: label.as_deref(),
+            content,
+        },
+    )
 }
 
 pub fn update(db: &Database, id: &str, content: &str) -> AppResult<Note> {
@@ -64,28 +86,27 @@ mod tests {
     #[test]
     fn creates_trimmed_notes() {
         let (_dir, db, id) = ready_book(10);
-        let note = create(&db, &id, 3, "  remember this \n").unwrap();
+        let note = create(&db, &id, "3", Some("  "), "  remember this \n").unwrap();
         assert_eq!(note.content, "remember this");
-        assert_eq!(list(&db, &id).unwrap().len(), 1);
+        assert_eq!(note.location, "3");
+        assert_eq!(note.label, None);
+        let long = "x".repeat(MAX_LABEL_LEN + 50);
+        let labelled = create(&db, &id, "4", Some(&long), "y").unwrap();
+        assert_eq!(labelled.label.unwrap().len(), MAX_LABEL_LEN);
+        assert_eq!(list(&db, &id).unwrap().len(), 2);
     }
 
     #[test]
-    fn rejects_empty_content_and_bad_pages() {
+    fn rejects_empty_content_and_bad_locations() {
         let (_dir, db, id) = ready_book(10);
+        for (location, content) in [("1", "   "), ("0", "x"), ("11", "x"), ("page 2", "x")] {
+            assert!(matches!(
+                create(&db, &id, location, None, content),
+                Err(AppError::Invalid(_))
+            ));
+        }
         assert!(matches!(
-            create(&db, &id, 1, "   "),
-            Err(AppError::Invalid(_))
-        ));
-        assert!(matches!(
-            create(&db, &id, 0, "x"),
-            Err(AppError::Invalid(_))
-        ));
-        assert!(matches!(
-            create(&db, &id, 11, "x"),
-            Err(AppError::Invalid(_))
-        ));
-        assert!(matches!(
-            create(&db, "missing", 1, "x"),
+            create(&db, "missing", "1", None, "x"),
             Err(AppError::NotFound(_))
         ));
     }
@@ -93,7 +114,7 @@ mod tests {
     #[test]
     fn updates_and_deletes() {
         let (_dir, db, id) = ready_book(10);
-        let note = create(&db, &id, 2, "a").unwrap();
+        let note = create(&db, &id, "2", None, "a").unwrap();
         assert_eq!(update(&db, &note.id, "b").unwrap().content, "b");
         assert!(update(&db, &note.id, "").is_err());
         delete(&db, &note.id).unwrap();

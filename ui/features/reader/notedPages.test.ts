@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Note } from "@/lib/types";
 import { adjacentNotedPage, groupByPage, notedPages } from "./notedPages";
 
-const note = (id: string, pageNumber: number): Note => ({
+const note = (id: string, page: number | string): Note => ({
   id,
   bookId: "b",
-  pageNumber,
+  location: String(page),
+  label: null,
   content: id,
   createdAt: 0,
   updatedAt: 0,
@@ -25,6 +26,10 @@ describe("notedPages", () => {
     expect(adjacentNotedPage(pages, 5, 1)).toBe(12);
     expect(adjacentNotedPage(pages, 40, 1)).toBeNull();
     expect(adjacentNotedPage(pages, 3, -1)).toBeNull();
+  });
+
+  it("skips notes without a valid page", () => {
+    expect(notedPages([...notes, note("x", "epubcfi(/6/2)")])).toEqual([3, 12, 40]);
   });
 
   it("groups notes by page", () => {

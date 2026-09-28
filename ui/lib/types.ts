@@ -1,15 +1,22 @@
 export type BookStatus = "importing" | "ready" | "missing";
 
+export type BookFormat = "pdf" | "epub";
+
 export type ZoomMode = "fit-page" | "fit-width" | "fit-height" | "custom";
 
 export interface Book {
   id: string;
+  format: BookFormat;
   title: string;
   author: string | null;
   filePath: string;
   coverPath: string | null;
+  /** PDF only; 0 when unknown. */
   pageCount: number;
-  currentPage: number;
+  /** Last reading position (see `lib/location`); null = start of the book. */
+  location: string | null;
+  /** Reading progress in [0, 1]. */
+  progress: number;
   zoomLevel: number | null;
   zoomMode: ZoomMode | null;
   fileSize: number;
@@ -23,7 +30,9 @@ export interface Book {
 export interface Note {
   id: string;
   bookId: string;
-  pageNumber: number;
+  location: string;
+  /** Display text captured at creation (e.g. a chapter title); null for PDF. */
+  label: string | null;
   content: string;
   createdAt: number;
   updatedAt: number;
@@ -44,7 +53,8 @@ export interface ImportJob {
 export type ThemePreference = "light" | "dark" | "system";
 
 export interface ReadingProgress {
-  currentPage: number;
+  location: string;
+  progress: number;
   zoomLevel: number | null;
   zoomMode: ZoomMode;
 }

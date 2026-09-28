@@ -5,8 +5,8 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 ## Status
 
-**Current phase:** v1 complete — awaiting user feedback
-**Next step:** collect feedback from real use. Candidate follow-ups (not started):
+**Current phase:** EPUB support (plan in `CLAUDE.md`) — phase 1 (format-independent locations) done
+**Next step:** EPUB phase 2 (import: detection, OPF metadata, cover). Other candidate follow-ups (not started):
 - Continuous-scroll reading mode (virtualized, reusing `PageRenderer`).
 - Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
 - Sort/search on the shelf by title/author.
@@ -30,6 +30,15 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
+
+## EPUB phase 1: locations (2026-09-28)
+
+- Migration 3: `books.format` (CHECK pdf|epub, default pdf), `books.location` (TEXT, null = start), `books.progress` (REAL 0..1, backfilled as current_page/page_count with page 1 = 0), `notes.location` + `notes.label`; `current_page`, `page_number` and `idx_notes_book_page` dropped (new `idx_notes_book`). `page_count` stays NOT NULL; 0 = unknown/EPUB (avoids a table rebuild).
+- `services/location.rs` validates per format (PDF page within 1..=page_count when known; EPUB `epubcfi(…)` ≤ 4096 chars) — used by `services/progress.rs` (new; `save_progress` goes through it) and `services/notes.rs`. Progress saves are now **rejected** when invalid (the old SQL clamped pages).
+- `list_notes` returns creation order; the UI sorts (PDF: by page in `notedPages.ts`). `create_note` takes `location` + optional `label` (trimmed, blank → null, cut at 200 chars).
+- UI: `ui/lib/location.ts` (`pdfPage`/`pdfLocation`/`pdfProgress`) is the only PDF page↔location conversion; shelf and details read `book.progress`; `readingProgress()` removed.
+- Verified: 44 Rust tests (incl. a v2→v3 migration test with notes, cascade and the format CHECK) + 19 vitest; end-to-end on a fresh copy of the user's real library in scratch XDG dirs (legacy dir + schema migrations in one start): shelf 5%, reader reopened at 29/601 in fit-height, page flip saved `location "30"`, a note saved at `"30"` with indicator dots.
+- The user's real library was migrated to the Oikotheke dir by their own install (schema 2 at that time); schema 3 runs on their next install.
 
 ## Rename to Oikotheke (2026-09-28)
 
@@ -86,7 +95,8 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - `services/library.rs` import copy/finalize/abort, soft remove, permanent delete via `.trash-<id>`
 - `services/reconcile.rs` startup repair; `import.rs` worker thread + events `import:progress|copied|failed`
 - `protocol.rs` `oikotheke://localhost/{book|cover}/<id>` (use `convertFileSrc("book/<id>", "oikotheke")`)
-- Notes: `services/notes.rs` validates (trimmed, non-empty, ≤ 20k chars, page within 1..pageCount). Commands list_notes, create_note, update_note, delete_note.
+- Notes: `services/notes.rs` validates (trimmed, non-empty, ≤ 20k chars, location valid for the book via `services/location.rs`). Commands list_notes, create_note(bookId, location, label?, content), update_note, delete_note.
+- Progress: `services/progress.rs` validates location + progress (0..1) before `db::books::update_progress`.
 - Commands: list_books, list_removed_books, get_book, import_books, save_cover, finalize_import, abort_import, remove_book, restore_book, delete_book, get_settings, set_setting
 
 - Commits: Conventional Commits, English, local only (never push). **Never add `Co-Authored-By` or any AI attribution.**
@@ -95,7 +105,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`, `cd src-tauri && cargo test`.
 - First `cargo check` takes ~2 min (webkit2gtk crates).
 - **Manual testing without clicking:** debug builds read `OIKOTHEKE_DEV_IMPORT=a.pdf:b.pdf` and queue those files 3 s after startup. Run with `GDK_BACKEND=x11 npm run tauri dev` so the window is an X11 client, then screenshot with `import -window $(xwininfo -root -tree | grep '"Oikotheke"' | awk '{print $1}') out.png` (root-window capture fails on Wayland). There is no xdotool, so clicks can't be automated.
-- **Driving the UI:** a scratch `xt.py` uses XTest via ctypes (`libXtst.so.6`) to click/press keys relative to the window (the user may be using the app at the same time — check with a screenshot first). Debug builds log every `oikotheke` range request (`grep "oikotheke range" dev.log`) to verify partial loading.
+- **Driving the UI:** a scratch `xt.py` uses XTest via ctypes (`libXtst.so.6`) to click/move/press keys/type relative to the window (the first click may only focus the window; click again) (the user may be using the app at the same time — check with a screenshot first). Debug builds log every `oikotheke` range request (`grep "oikotheke range" dev.log`) to verify partial loading.
 - Stopping the dev app: don't `pkill -f` with a pattern that also matches your own shell command; use `ps -eo pid,args | grep "[t]arget/debug/oikotheke"`.
 - Tauri dev restarts the app on every Rust change; with `OIKOTHEKE_DEV_IMPORT` set that re-imports (duplicates). Start without it once data exists.
 - Test PDFs: generate them (a scratch `genpdf.py` wrote N-page PDFs with optional random filler streams to make ~600 MB files). Never use the user's own PDFs.

@@ -1,5 +1,3 @@
-import type { Book } from "./types";
-
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB"];
@@ -10,12 +8,6 @@ export function formatBytes(bytes: number): string {
     unit++;
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
-}
-
-/** Reading progress in [0, 1]; page 1 counts as not started. */
-export function readingProgress(book: Pick<Book, "currentPage" | "pageCount">): number {
-  if (book.pageCount <= 1 || book.currentPage <= 1) return 0;
-  return Math.min(1, book.currentPage / book.pageCount);
 }
 
 export function formatDate(ms: number): string {

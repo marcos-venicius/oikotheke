@@ -14,10 +14,11 @@ pub fn list_notes(state: State<AppState>, book_id: String) -> AppResult<Vec<Note
 pub fn create_note(
     state: State<AppState>,
     book_id: String,
-    page_number: i64,
+    location: String,
+    label: Option<String>,
     content: String,
 ) -> AppResult<Note> {
-    notes::create(&state.db, &book_id, page_number, &content)
+    notes::create(&state.db, &book_id, &location, label.as_deref(), &content)
 }
 
 #[tauri::command]

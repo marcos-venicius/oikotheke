@@ -196,9 +196,10 @@ Range requests, and only a small window of pages around the current one is rende
 Progress is saved automatically — the user never clicks "Save". Per book we store:
 
 ```text
-currentPage
-zoomMode   (fit-page | fit-width | fit-height | custom)
-zoomLevel  (used when zoomMode = custom)
+location   last position (see Locations)
+progress   0..1, shown on the shelf and the book page
+zoomMode   PDF: fit-page | fit-width | fit-height | custom
+zoomLevel  PDF: used when zoomMode = custom
 ```
 
 Expected behavior:
@@ -208,9 +209,12 @@ Expected behavior:
 3. Progress is saved (debounced) while reading.
 4. On leaving the reader or closing the window, the latest position is flushed to disk.
 
+The backend validates every saved position against the book's format (`services/location.rs`)
+and rejects invalid ones instead of storing them.
+
 ## Notes
 
-Users create notes tied to a specific page. A page can have multiple notes.
+Users create notes tied to a location (a page, for PDF). A location can have multiple notes.
 
 Inside the reader the user can:
 
@@ -220,25 +224,44 @@ Inside the reader the user can:
 - See which pages have notes, and navigate between annotated pages.
 
 Notes are persisted automatically. Content is trimmed, non-empty and at most 20,000
-characters; the page must be within the book's page range.
+characters; the location must be valid for the book (for PDF, a page within its range). An
+optional label (at most 200 characters) is captured at creation for formats whose locations
+are not human-readable. The backend returns notes in creation order; ordering by location is
+format-specific and done in the UI.
 
 The book details page also lists a book's notes and can open the reader at a note's page.
 
 ## Data model
+
+### Locations
+
+A PDF has fixed pages. An EPUB reflows: a "page" depends on window size and font size, so page
+numbers are not stable positions. Every position is therefore stored as an opaque
+**location** string, interpreted by the book's format:
+
+| Format | `location` | Shown to the user as |
+|---|---|---|
+| pdf | page number (`"42"`) | "Page 42 of 300" |
+| epub | EPUB CFI (`"epubcfi(/6/14!/4/2/1:0)"`) | chapter title + percentage |
+
+Validation lives in `src-tauri/src/services/location.rs`; the UI converts PDF pages to and from
+locations only in `ui/lib/location.ts`.
 
 ### Book
 
 ```text
 Book
 ├── id           UUID
+├── format       pdf | epub
 ├── title
 ├── author?
 ├── filePath     relative to app-data
 ├── coverPath?   relative to app-data
-├── pageCount
-├── currentPage
-├── zoomMode?
-├── zoomLevel?
+├── pageCount    PDF only; 0 when unknown (importing, or EPUB)
+├── location?    last reading position; null = start of the book
+├── progress     0..1
+├── zoomMode?    PDF view setting
+├── zoomLevel?   PDF view setting
 ├── fileSize     bytes
 ├── status       importing | ready | missing
 ├── removedAt?   set when soft-removed
@@ -253,7 +276,8 @@ Book
 Note
 ├── id
 ├── bookId       (cascade delete with the book)
-├── pageNumber
+├── location
+├── label?       display text captured at creation (e.g. a chapter title); null for PDF
 ├── content
 ├── createdAt
 └── updatedAt
@@ -264,12 +288,14 @@ Note
 Key/value pairs (e.g. `theme`: light | dark | system).
 
 Schema changes go through append-only migrations (`src-tauri/src/db/migrations.rs`); never
-edit an existing migration.
+edit an existing migration. Migration 3 replaced `books.current_page` and
+`notes.page_number` with locations, losslessly.
 
 ## EPUB support (planned)
 
-Not implemented yet. This section is the agreed design; move each part into the sections above
-as it ships, and delete this section when EPUB is complete.
+Not implemented yet, except the format-independent model (phase 1). This section is the agreed
+design; move each part into the sections above as it ships, and delete this section when EPUB
+is complete.
 
 ### Principle
 
@@ -277,34 +303,8 @@ PDF and EPUB share everything except the reader engine: library, storage, import
 removal, reconcile, book details, notes and progress. Format-specific code lives behind
 small interfaces, never as `if (format === …)` scattered across screens.
 
-### Fixed vs reflowable
-
-A PDF has fixed pages. An EPUB reflows: a "page" depends on window size and font size, so page
-numbers are not stable positions. Every position is therefore stored as an opaque
-**location** string, interpreted by the book's format:
-
-| Format | `location` | Shown to the user as |
-|---|---|---|
-| pdf | page number (`"42"`) | "Page 42 of 300" |
-| epub | EPUB CFI (`"epubcfi(/6/14!/4/2/1:0)"`) | chapter title + percentage |
-
-### Data model changes
-
-```text
-Book
-├── format       pdf | epub               (new; existing rows = pdf)
-├── location?    replaces currentPage     (existing rows: currentPage as text)
-├── progress     0..1, for shelf progress bars (existing rows: currentPage / pageCount)
-└── pageCount    PDF only; null for EPUB
-
-Note
-├── location     replaces pageNumber      (existing rows: pageNumber as text)
-└── label        display text, e.g. "Page 42" or a chapter title
-```
-
-Reader view settings become per format: PDF keeps `zoomMode`/`zoomLevel`; EPUB gets font
-size, margins, and paginated vs scrolled flow. The migration must be lossless for existing PDF
-books and notes.
+Reader view settings are per format: PDF keeps `zoomMode`/`zoomLevel`; EPUB gets font size,
+margins, and paginated vs scrolled flow (new columns when phase 3 needs them).
 
 ### Import
 
@@ -336,7 +336,7 @@ Verify both with a hostile test EPUB (inline script, remote image, remote font).
 
 Each phase is a separate, releasable change that keeps PDF fully working:
 
-1. **Generalize the model** — `format`, `location`, `progress`, note `location`/`label`,
+1. ✅ **Generalize the model** — `format`, `location`, `progress`, note `location`/`label`,
    lossless migration. PDF only; no visible change.
 2. **EPUB import** — detection, storage, OPF metadata and cover; EPUBs appear on the shelf.
 3. **EPUB reader** — foliate-js reader, autosave and resume.

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
 import type { Note } from "@/lib/types";
 import { debounce } from "@/lib/debounce";
+import { pdfLocation, pdfPage } from "@/lib/location";
 import { formatRelative, plural } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Button, IconButton } from "@/components/Button";
@@ -22,7 +23,7 @@ export function NotesPanel({ page, notes, onGoTo, onClose }: NotesPanelProps) {
   // A draft belongs to the page it was started on.
   const [draftPage, setDraftPage] = useState<number | null>(null);
   const pageNotes = useMemo(
-    () => notes.notes.filter((n) => n.pageNumber === page),
+    () => notes.notes.filter((n) => pdfPage(n.location) === page),
     [notes.notes, page],
   );
   const prev = adjacentNotedPage(notes.pages, page, -1);
@@ -72,7 +73,7 @@ export function NotesPanel({ page, notes, onGoTo, onClose }: NotesPanelProps) {
               <NoteEditor
                 autoFocus
                 onSave={async (content) => {
-                  await notes.create(page, content);
+                  await notes.create(pdfLocation(page), null, content);
                   setDraftPage(null);
                 }}
                 onDiscard={() => setDraftPage(null)}

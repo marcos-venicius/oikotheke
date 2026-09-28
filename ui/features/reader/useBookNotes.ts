@@ -28,8 +28,8 @@ export function useBookNotes(bookId: string) {
   };
 
   const create = useCallback(
-    async (page: number, content: string) => {
-      const note = await notesService.create(bookId, page, content).catch(fail("save"));
+    async (location: string, label: string | null, content: string) => {
+      const note = await notesService.create(bookId, location, label, content).catch(fail("save"));
       setNotes((list) => [...list, note]);
       return note;
     },

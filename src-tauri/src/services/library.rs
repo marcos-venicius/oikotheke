@@ -232,7 +232,13 @@ pub(crate) mod tests {
         let (dir, db, storage) = setup();
         let book =
             copy_into_library(&db, &storage, &write_pdf(dir.path(), "a.pdf"), |_| {}).unwrap();
-        crate::db::notes::insert(&db.conn(), &book.id, 1, "note").unwrap();
+        let note = crate::db::notes::NewNote {
+            book_id: &book.id,
+            location: "1",
+            label: None,
+            content: "note",
+        };
+        crate::db::notes::insert(&db.conn(), &note).unwrap();
         delete_permanently(&db, &storage, &book.id).unwrap();
         assert!(storage.scan().unwrap().is_empty());
         assert!(crate::db::notes::list_by_book(&db.conn(), &book.id)

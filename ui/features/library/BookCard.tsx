@@ -7,7 +7,6 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Book } from "@/lib/types";
-import { readingProgress } from "@/lib/format";
 import { Menu, type MenuItem } from "@/components/Menu";
 import { cn } from "@/lib/cn";
 import { BookCover } from "./BookCover";
@@ -29,7 +28,7 @@ export function BookCard({
   onRestore,
   onDelete,
 }: BookCardProps) {
-  const progress = readingProgress(book);
+  const progress = book.progress;
   const missing = book.status === "missing";
   const removed = book.removedAt !== null;
 

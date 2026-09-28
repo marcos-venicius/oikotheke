@@ -3,22 +3,25 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use crate::error::{AppError, AppResult};
 use crate::models::{new_id, now_ms, Note};
 
-const SELECT: &str = "SELECT id, book_id, page_number, content, created_at, updated_at FROM notes";
+const SELECT: &str =
+    "SELECT id, book_id, location, label, content, created_at, updated_at FROM notes";
 
 fn from_row(row: &Row) -> rusqlite::Result<Note> {
     Ok(Note {
         id: row.get(0)?,
         book_id: row.get(1)?,
-        page_number: row.get(2)?,
-        content: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
+        location: row.get(2)?,
+        label: row.get(3)?,
+        content: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
     })
 }
 
+/// Notes in creation order. Ordering by location depends on the format, so the UI does it.
 pub fn list_by_book(conn: &Connection, book_id: &str) -> AppResult<Vec<Note>> {
     let mut stmt = conn.prepare(&format!(
-        "{SELECT} WHERE book_id = ?1 ORDER BY page_number, created_at"
+        "{SELECT} WHERE book_id = ?1 ORDER BY created_at, rowid"
     ))?;
     let notes = stmt
         .query_map([book_id], from_row)?
@@ -32,18 +35,27 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Note> {
         .ok_or_else(|| AppError::NotFound(format!("note {id}")))
 }
 
-pub fn insert(
-    conn: &Connection,
-    book_id: &str,
-    page_number: i64,
-    content: &str,
-) -> AppResult<Note> {
+pub struct NewNote<'a> {
+    pub book_id: &'a str,
+    pub location: &'a str,
+    pub label: Option<&'a str>,
+    pub content: &'a str,
+}
+
+pub fn insert(conn: &Connection, note: &NewNote) -> AppResult<Note> {
     let id = new_id();
     let now = now_ms();
     conn.execute(
-        "INSERT INTO notes (id, book_id, page_number, content, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-        params![id, book_id, page_number, content, now],
+        "INSERT INTO notes (id, book_id, location, label, content, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        params![
+            id,
+            note.book_id,
+            note.location,
+            note.label,
+            note.content,
+            now
+        ],
     )?;
     get(conn, &id)
 }
@@ -84,20 +96,34 @@ mod tests {
         db
     }
 
+    fn note<'a>(book_id: &'a str, location: &'a str, content: &'a str) -> NewNote<'a> {
+        NewNote {
+            book_id,
+            location,
+            label: None,
+            content,
+        }
+    }
+
     #[test]
     fn crud_and_ordering() {
         let db = db_with_book();
         let conn = db.conn();
-        let n1 = insert(&conn, "b", 42, "second page").unwrap();
-        insert(&conn, "b", 3, "first page").unwrap();
-        insert(&conn, "b", 42, "another on 42").unwrap();
+        let n1 = insert(&conn, &note("b", "42", "second page")).unwrap();
+        insert(
+            &conn,
+            &NewNote {
+                label: Some("Chapter 1"),
+                ..note("b", "3", "first page")
+            },
+        )
+        .unwrap();
+        insert(&conn, &note("b", "42", "another on 42")).unwrap();
 
-        let pages: Vec<i64> = list_by_book(&conn, "b")
-            .unwrap()
-            .iter()
-            .map(|n| n.page_number)
-            .collect();
-        assert_eq!(pages, vec![3, 42, 42]);
+        let list = list_by_book(&conn, "b").unwrap();
+        let locations: Vec<&str> = list.iter().map(|n| n.location.as_str()).collect();
+        assert_eq!(locations, vec!["42", "3", "42"]);
+        assert_eq!(list[1].label.as_deref(), Some("Chapter 1"));
 
         let updated = update(&conn, &n1.id, "edited").unwrap();
         assert_eq!(updated.content, "edited");
@@ -112,7 +138,7 @@ mod tests {
     fn notes_cascade_with_book() {
         let db = db_with_book();
         let conn = db.conn();
-        insert(&conn, "b", 1, "x").unwrap();
+        insert(&conn, &note("b", "1", "x")).unwrap();
         books::delete(&conn, "b").unwrap();
         assert!(list_by_book(&conn, "b").unwrap().is_empty());
     }
@@ -120,6 +146,6 @@ mod tests {
     #[test]
     fn note_requires_existing_book() {
         let db = Database::open_in_memory().unwrap();
-        assert!(insert(&db.conn(), "ghost", 1, "x").is_err());
+        assert!(insert(&db.conn(), &note("ghost", "1", "x")).is_err());
     }
 }

@@ -41,18 +41,39 @@ impl BookStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BookFormat {
+    Pdf,
+    Epub,
+}
+
+impl BookFormat {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "epub" => BookFormat::Epub,
+            _ => BookFormat::Pdf,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Book {
     pub id: String,
+    pub format: BookFormat,
     pub title: String,
     pub author: Option<String>,
     /// Relative to the app data directory.
     pub file_path: String,
     /// Relative to the app data directory.
     pub cover_path: Option<String>,
+    /// PDF only; 0 when unknown (importing, or a reflowable EPUB).
     pub page_count: i64,
-    pub current_page: i64,
+    /// Last reading position, interpreted per format (see `services::location`). None = start.
+    pub location: Option<String>,
+    /// Reading progress in [0, 1].
+    pub progress: f64,
     pub zoom_level: Option<f64>,
     pub zoom_mode: Option<String>,
     pub file_size: i64,
@@ -68,7 +89,11 @@ pub struct Book {
 pub struct Note {
     pub id: String,
     pub book_id: String,
-    pub page_number: i64,
+    /// Where the note belongs, interpreted per format (see `services::location`).
+    pub location: String,
+    /// Display text captured when the note was created (e.g. a chapter title); None for PDF,
+    /// whose label is derived from the page.
+    pub label: Option<String>,
     pub content: String,
     pub created_at: i64,
     pub updated_at: i64,
@@ -86,7 +111,8 @@ pub struct BookMetadata {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadingProgress {
-    pub current_page: i64,
+    pub location: String,
+    pub progress: f64,
     pub zoom_level: Option<f64>,
     pub zoom_mode: Option<String>,
 }

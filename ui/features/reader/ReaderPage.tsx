@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Book, ZoomMode } from "@/lib/types";
 import { Button } from "@/components/Button";
+import { pdfLocation, pdfPage, pdfProgress } from "@/lib/location";
 import { progressService } from "@/services/progressService";
 import { NotesPanel } from "./NotesPanel";
 import { PageScrubber } from "./PageScrubber";
@@ -52,7 +53,9 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   // Callers may open the reader at a specific page (e.g. a note in book details).
   const requestedPage = (useLocation().state as { page?: number } | null)?.page;
   const pageCount = renderer.pageCount;
-  const [page, setPage] = useState(() => clampPage(requestedPage ?? book.currentPage, pageCount));
+  const [page, setPage] = useState(() =>
+    clampPage(requestedPage ?? pdfPage(book.location) ?? 1, pageCount),
+  );
   const [zoomMode, setZoomMode] = useState<ZoomMode>(book.zoomMode ?? "fit-page");
   const [customZoom, setCustomZoom] = useState(book.zoomLevel ?? 1);
   const [resolvedZoom, setResolvedZoom] = useState(customZoom);
@@ -67,11 +70,12 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   const saver = useMemo(() => progressService.createSaver(book.id), [book.id]);
   useEffect(() => {
     saver.schedule({
-      currentPage: page,
+      location: pdfLocation(page),
+      progress: pdfProgress(page, pageCount),
       zoomMode,
       zoomLevel: zoomMode === "custom" ? customZoom : null,
     });
-  }, [saver, page, zoomMode, customZoom]);
+  }, [saver, page, pageCount, zoomMode, customZoom]);
   useEffect(() => {
     const unlisten = getCurrentWindow().onCloseRequested(() => saver.flush());
     return () => {
