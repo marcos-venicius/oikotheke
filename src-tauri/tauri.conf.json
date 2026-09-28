@@ -23,11 +23,12 @@
       "csp": {
         "default-src": "'self'",
         "script-src": "'self' 'wasm-unsafe-eval'",
-        "style-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline' blob:",
         "img-src": "'self' data: blob: oikotheke: http://oikotheke.localhost",
         "connect-src": "'self' ipc: http://ipc.localhost oikotheke: http://oikotheke.localhost",
         "worker-src": "'self' blob:",
-        "font-src": "'self' data:",
+        "frame-src": "blob:",
+        "font-src": "'self' data: blob:",
         "object-src": "'none'",
         "base-uri": "'none'"
       }

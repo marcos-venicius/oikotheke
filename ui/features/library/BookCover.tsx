@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Book } from "@/lib/types";
-import { coverUrl } from "@/services/pdfService";
+import { coverUrl } from "@/services/bookFile";
 import { cn } from "@/lib/cn";
 
 /** Deterministic hue so a book without a cover always gets the same placeholder. */

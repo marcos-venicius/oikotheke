@@ -1,7 +1,7 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { Book, BookMetadata } from "@/lib/types";
+import { bookUrl, fetchRange } from "./bookFile";
 import { canvasToJpeg, COVER_WIDTH } from "./coverImage";
 import { pickAuthor, pickTitle } from "./pdfTitle";
 
@@ -11,41 +11,12 @@ export type PDFDocumentProxy = pdfjs.PDFDocumentProxy;
 export type PDFPageProxy = pdfjs.PDFPageProxy;
 export type PDFLoadingTask = pdfjs.PDFDocumentLoadingTask;
 
-const SCHEME = "oikotheke";
 /**
  * pdf.js fetches the file in chunks of this size, only where it needs data. Kept small because
  * opening a document walks the page tree (`checkLastPage`), touching one chunk per page object.
  */
 const RANGE_CHUNK = 64 * 1024;
-/** Must stay below the backend's per-response cap (16 MB). */
-const MAX_FETCH = 8 * 1024 * 1024;
 const ASSETS = new URL("/pdfjs/", window.location.href).href;
-
-export function bookUrl(id: string): string {
-  return convertFileSrc(`book/${id}`, SCHEME);
-}
-
-export function coverUrl(book: Book): string | null {
-  if (!book.coverPath) return null;
-  return `${convertFileSrc(`cover/${book.id}`, SCHEME)}?v=${book.updatedAt}`;
-}
-
-/** Fetches bytes [begin, end) with HTTP Range requests, splitting large ranges. */
-async function fetchRange(url: string, begin: number, end: number): Promise<Uint8Array> {
-  const out = new Uint8Array(end - begin);
-  let offset = begin;
-  while (offset < end) {
-    const last = Math.min(end, offset + MAX_FETCH) - 1;
-    const res = await fetch(url, { headers: { Range: `bytes=${offset}-${last}` } });
-    if (res.status !== 206 && res.status !== 200)
-      throw new Error(`Range request failed: ${res.status}`);
-    const chunk = new Uint8Array(await res.arrayBuffer());
-    if (chunk.length === 0) throw new Error("Empty range response");
-    out.set(chunk.subarray(0, end - offset), offset - begin);
-    offset += chunk.length;
-  }
-  return out;
-}
 
 /**
  * Feeds pdf.js through explicit byte ranges instead of downloading the whole file,

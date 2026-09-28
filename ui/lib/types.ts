@@ -61,6 +61,7 @@ export type ThemePreference = "light" | "dark" | "system";
 export interface ReadingProgress {
   location: string;
   progress: number;
+  /** PDF view settings; null for EPUB. */
   zoomLevel: number | null;
-  zoomMode: ZoomMode;
+  zoomMode: ZoomMode | null;
 }

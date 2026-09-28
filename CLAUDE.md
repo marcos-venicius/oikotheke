@@ -10,8 +10,8 @@ from the code. Implementation details, progress and gotchas go in `PROGRESS.md` 
 
 ## Overview
 
-**Oikotheke** is a desktop application to organize, read and annotate books locally. It reads and
-annotates PDF; EPUB books can be imported, and reading them is in progress (see
+**Oikotheke** is a desktop application to organize, read and annotate books locally. It reads PDF
+and EPUB books; notes work for PDF, and EPUB notes are next (see
 [EPUB support](#epub-support-planned)).
 
 It works as a **digital bookshelf**: the user imports books, organizes the library and opens
@@ -39,8 +39,8 @@ The core principle is **local-first**:
 - The application works fully offline.
 
 **Status:** v1 is complete (library, reader, progress, notes, book details, hardening, Linux
-install) and renamed to Oikotheke. Next: EPUB support, implemented in the phases described
-below.
+install) and renamed to Oikotheke. EPUB import and reading are done; EPUB notes (phase 4)
+are next.
 
 ## Goals
 
@@ -183,9 +183,17 @@ Both steps are idempotent and safe to interrupt: a crash leaves either the old o
 state, and the next start finishes the job. A migration failure is logged and never deletes
 data. This migration stays until all known installs have run it at least once.
 
-## PDF reader
+## Reader
 
-Opening a book enters a book-like reading experience. The reader:
+Opening a book enters a book-like reading experience. `ReaderPage` loads the book and hands it
+to the reader for its format; both share the chrome (toolbar and progress bar that fade while
+reading, focus mode, loading/error states) and the progress autosave.
+
+Reading comfort comes first: keep visible controls to a minimum.
+
+### PDF reader
+
+The PDF reader:
 
 - Shows one page at a time, sized to the window.
 - Navigates forward/back (buttons, keyboard, page scrubber).
@@ -195,19 +203,34 @@ Opening a book enters a book-like reading experience. The reader:
 - Has a focus mode (full screen, minimal chrome).
 - Returns to the library/book page.
 
-Reading comfort comes first: keep visible controls to a minimum.
-
 Large files are streamed: the PDF is served through the `oikotheke://` protocol with HTTP
 Range requests, and only a small window of pages around the current one is rendered.
+
+### EPUB reader
+
+EPUBs reflow, so there are no fixed pages. The EPUB reader uses
+[foliate-js](https://github.com/johnfactotum/foliate-js) (MIT) and:
+
+- Lays the text out as book-like pages (two columns on wide windows) or as a continuous
+  scroll per chapter.
+- Navigates forward/back (buttons, keyboard), through the table of contents, or by dragging the
+  percentage bar, which also shows the current chapter.
+- Changes the font size (80–200%).
+- Follows the app theme: pages take the app background; dark mode forces readable text.
+- Has the same focus mode and returns to the library.
+
+Font size and layout are app-wide preferences (`epub.fontSize`, `epub.flow` in settings), not
+per book. The book is read through the `oikotheke://` protocol with HTTP Range requests
+(zip.js), so only the ZIP directory and the chapters being shown are fetched.
 
 ## Reading progress
 
 Progress is saved automatically — the user never clicks "Save". Per book we store:
 
 ```text
-location   last position (see Locations)
+location   last position (see Locations): a page for PDF, a CFI for EPUB
 progress   0..1, shown on the shelf and the book page
-zoomMode   PDF: fit-page | fit-width | fit-height | custom
+zoomMode   PDF: fit-page | fit-width | fit-height | custom (null for EPUB)
 zoomLevel  PDF: used when zoomMode = custom
 ```
 
@@ -294,7 +317,8 @@ Note
 
 ### Settings
 
-Key/value pairs (e.g. `theme`: light | dark | system).
+Key/value pairs: `theme` (light | dark | system), `epub.fontSize` (percent), `epub.flow`
+(paginated | scrolled).
 
 Schema changes go through append-only migrations (`src-tauri/src/db/migrations.rs`); never
 edit an existing migration. Migration 3 replaced `books.current_page` and
@@ -302,7 +326,7 @@ edit an existing migration. Migration 3 replaced `books.current_page` and
 
 ## EPUB support (planned)
 
-Phases 1 (format-independent model) and 2 (import) are done; reading and notes are not. This section is the agreed
+Phases 1 (model), 2 (import) and 3 (reader) are done; EPUB notes are not. This section is the agreed
 design; move each part into the sections above as it ships, and delete this section when EPUB
 is complete.
 
@@ -312,24 +336,8 @@ PDF and EPUB share everything except the reader engine: library, storage, import
 removal, reconcile, book details, notes and progress. Format-specific code lives behind
 small interfaces, never as `if (format === …)` scattered across screens.
 
-Reader view settings are per format: PDF keeps `zoomMode`/`zoomLevel`; EPUB gets font size,
-margins, and paginated vs scrolled flow (new columns when phase 3 needs them).
-
-### Reader
-
-- PDF keeps the current pdf.js reader unchanged.
-- EPUB uses [foliate-js](https://github.com/johnfactotum/foliate-js) (MIT, npm `foliate-js`):
-  CFI support, paginated and scrolled layouts, table of contents.
-- Both readers implement the same contract: open at a location, next/previous, go to a
-  location, report location changes (for autosave and notes).
-- EPUB controls: font size, margins, theme (follows the app theme), table of contents,
-  percentage slider. No zoom/fit modes.
-
-### Security and privacy
-
-EPUB content is HTML/CSS and may contain scripts or remote references. EPUB content must never
-run scripts or reach the network: render it in sandboxed iframes and enforce it through CSP.
-Verify both with a hostile test EPUB (inline script, remote image, remote font).
+The readers are separate components (`PdfReader`, `EpubReader`) chosen once by
+`ReaderPage`; each reports location changes to the shared autosave.
 
 ### Phases
 
@@ -339,7 +347,7 @@ Each phase is a separate, releasable change that keeps PDF fully working:
    lossless migration. PDF only; no visible change.
 2. ✅ **EPUB import** — detection, storage, OPF metadata and cover; EPUBs appear on the shelf
    (opening one shows "not available yet" until phase 3).
-3. **EPUB reader** — foliate-js reader, autosave and resume.
+3. ✅ **EPUB reader** — foliate-js reader, autosave and resume.
 4. **EPUB notes** — create/edit/delete at a location, indicators, navigate annotated
    locations; the book details page lists them.
 
@@ -367,6 +375,26 @@ By default, book content and notes stay local. Never send to any server:
 
 No analytics, telemetry or external services without an explicit product decision. The
 release build ships with a strict CSP.
+
+### Book content is untrusted
+
+EPUB content is HTML/CSS and may contain scripts or references to the network. It must never
+run code or reach the network. Iframe sandboxing can't help: foliate-js needs `allow-scripts`
+because of a WebKit bug, and serves chapters as same-origin `blob:` URLs. Two independent
+layers enforce it instead:
+
+1. **CSP** (release builds): `script-src 'self'` (no inline, no `blob:`), `frame-src blob:`,
+   and no remote origin in any directive. `blob:` chapter documents inherit it.
+2. **Sanitizer** (`ui/services/epubSanitize.ts`, all builds): every (X)HTML, SVG and CSS
+   resource is cleaned before it is displayed — scripts, `on*` handlers, iframes/objects,
+   `<base>`, meta refresh, and every remote URL in resource attributes and CSS are removed.
+   foliate-js already drops packaged scripts.
+
+Links to websites are never opened (the reader shows the URL instead). `tauri dev` does **not**
+apply the CSP, so only the sanitizer protects dev builds. Any change to the reader, the CSP or
+the sanitizer must be re-verified with a hostile EPUB (inline, packaged and remote scripts,
+`onerror`, remote image/CSS/font/iframe, external link) against a local server that logs
+requests, in a release build: no request may reach the server and no script may run.
 
 ## UX
 
@@ -397,6 +425,7 @@ UI (ui/features)
 Application services (ui/services → Tauri commands → src-tauri/src/services)
 ├── Library service (import, remove, restore, delete, reconcile)
 ├── PDF service (pdf.js: metadata, covers, rendering)
+├── EPUB service (backend: detection, metadata, cover; UI: foliate-js loading, sanitizer)
 ├── Reading progress service
 └── Notes service
         │
@@ -414,7 +443,8 @@ Persistence (Rust)
 - **Tauri 2** (Rust): storage, SQLite (rusqlite), import queue, `oikotheke://` protocol.
 - **React 19 + TypeScript + Vite** in `ui/` (not `src/`); alias `@/` → `ui/`.
 - **Tailwind CSS v4** with CSS-variable design tokens; **pdf.js** for PDF parsing/rendering;
-  react-router (MemoryRouter); lucide-react icons.
+  **foliate-js** + **@zip.js/zip.js** for EPUB reading (`zip` + `quick-xml` in Rust for import);
+  react-router (MemoryRouter); lucide-react icons. jsdom is a test-only dependency (DOM tests).
 
 Dependency versions are recent (pdfjs-dist 6, react-router 8, TypeScript 6, ESLint 10,
 vitest 5): check the installed typings in `node_modules` before assuming an API.

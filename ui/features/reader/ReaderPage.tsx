@@ -1,253 +1,42 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { Book, ZoomMode } from "@/lib/types";
-import { Button } from "@/components/Button";
-import { pdfLocation, pdfPage, pdfProgress } from "@/lib/location";
-import { progressService } from "@/services/progressService";
-import { NotesPanel } from "./NotesPanel";
-import { PageScrubber } from "./PageScrubber";
-import { PageView } from "./PageView";
-import { ReaderToolbar } from "./ReaderToolbar";
-import type { PageRenderer } from "./pageRenderer";
-import { clampPage, stepZoom } from "./readerMath";
-import { useBookNotes } from "./useBookNotes";
-import { useFocusMode } from "./useFocusMode";
-import { useReaderDocument } from "./useReaderDocument";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router";
+import type { Book } from "@/lib/types";
+import { describeError } from "@/services/ipc";
+import { libraryService } from "@/services/libraryService";
+import { EpubReader } from "./EpubReader";
+import { PdfReader } from "./PdfReader";
+import { ReaderError, ReaderLoading } from "./ReaderStatus";
 
-const CHROME_IDLE_MS = 2500;
+type State =
+  { status: "loading" } | { status: "error"; message: string } | { status: "ready"; book: Book };
 
+/** Loads the book record and hands it to the reader for its format. */
 export function ReaderPage() {
   const { id = "" } = useParams();
-  const navigate = useNavigate();
-  const state = useReaderDocument(id);
+  // Tagged with the book it belongs to, so switching books shows "loading" without a reset.
+  const [state, setState] = useState<State & { id?: string }>({ status: "loading" });
 
-  if (state.status === "loading") {
-    return (
-      <div className="flex h-full items-center justify-center bg-reader">
-        <span className="size-6 animate-spin rounded-full border-2 border-border border-t-accent" />
-      </div>
-    );
-  }
-  if (state.status === "error") {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-        <p className="text-sm font-medium">This book can't be opened</p>
-        <p className="max-w-sm text-sm text-muted">{state.message}</p>
-        <Button onClick={() => navigate("/")}>Back to library</Button>
-      </div>
-    );
-  }
-  return <Reader key={state.book.id} book={state.book} renderer={state.renderer} />;
-}
-
-function isTyping(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable || /^(INPUT|TEXTAREA)$/.test(target.tagName))
-  );
-}
-
-function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
-  const navigate = useNavigate();
-  // Callers may open the reader at a specific page (e.g. a note in book details).
-  const requestedPage = (useLocation().state as { page?: number } | null)?.page;
-  const pageCount = renderer.pageCount;
-  const [page, setPage] = useState(() =>
-    clampPage(requestedPage ?? pdfPage(book.location) ?? 1, pageCount),
-  );
-  const [zoomMode, setZoomMode] = useState<ZoomMode>(book.zoomMode ?? "fit-page");
-  const [customZoom, setCustomZoom] = useState(book.zoomLevel ?? 1);
-  const [resolvedZoom, setResolvedZoom] = useState(customZoom);
-  const [notesOpen, setNotesOpen] = useState(false);
-  const notes = useBookNotes(book.id);
-  const chrome = useChromeVisibility();
-  const { focus, setFocusMode } = useFocusMode();
-  // While annotating, keep the toolbar in place above the notes panel.
-  const chromeVisible = chrome.visible || notesOpen;
-
-  // Autosave: debounced while reading, flushed when leaving or closing the window.
-  const saver = useMemo(() => progressService.createSaver(book.id), [book.id]);
   useEffect(() => {
-    saver.schedule({
-      location: pdfLocation(page),
-      progress: pdfProgress(page, pageCount),
-      zoomMode,
-      zoomLevel: zoomMode === "custom" ? customZoom : null,
-    });
-  }, [saver, page, pageCount, zoomMode, customZoom]);
-  useEffect(() => {
-    const unlisten = getCurrentWindow().onCloseRequested(() => saver.flush());
+    let active = true;
+    libraryService
+      .getBook(id)
+      .then((book) => {
+        if (book.status === "missing") throw new Error("The stored copy of this book is missing.");
+        if (active) setState({ status: "ready", book, id });
+      })
+      .catch((error) => active && setState({ status: "error", message: describeError(error), id }));
     return () => {
-      void saver.flush();
-      void unlisten.then((fn) => fn());
+      active = false;
     };
-  }, [saver]);
+  }, [id]);
 
-  const goTo = useCallback((target: number) => setPage(clampPage(target, pageCount)), [pageCount]);
-  const flip = useCallback(
-    (dir: 1 | -1) => setPage((p) => clampPage(p + dir, pageCount)),
-    [pageCount],
+  const current = state.id === id ? state : { status: "loading" as const };
+  if (current.status === "loading") return <ReaderLoading />;
+  if (current.status === "error") return <ReaderError message={current.message} />;
+  const { book } = current;
+  return book.format === "epub" ? (
+    <EpubReader key={book.id} book={book} />
+  ) : (
+    <PdfReader key={book.id} book={book} />
   );
-  const zoom = useCallback(
-    (dir: 1 | -1) => {
-      setCustomZoom(stepZoom(resolvedZoom, dir));
-      setZoomMode("custom");
-    },
-    [resolvedZoom],
-  );
-  const back = useCallback(() => navigate("/"), [navigate]);
-  const toggleFocus = useCallback(() => setFocusMode(!focus), [focus, setFocusMode]);
-  // Esc leaves focus mode first, then the reader.
-  const escape = useCallback(
-    () => (focus ? setFocusMode(false) : back()),
-    [focus, setFocusMode, back],
-  );
-
-  const handlers = useRef({ flip, goTo, zoom, escape, toggleFocus });
-  useLayoutEffect(() => {
-    handlers.current = { flip, goTo, zoom, escape, toggleFocus };
-  });
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target) || e.altKey || e.metaKey) return;
-      const h = handlers.current;
-      const withCtrl = e.ctrlKey;
-      switch (e.key) {
-        case "ArrowRight":
-        case "PageDown":
-          h.flip(1);
-          break;
-        case "ArrowLeft":
-        case "PageUp":
-          h.flip(-1);
-          break;
-        case "Home":
-          h.goTo(1);
-          break;
-        case "End":
-          h.goTo(Number.MAX_SAFE_INTEGER);
-          break;
-        case "+":
-        case "=":
-          h.zoom(1);
-          break;
-        case "-":
-          h.zoom(-1);
-          break;
-        case "0":
-          setZoomMode("fit-page");
-          break;
-        case "w":
-        case "W":
-          if (withCtrl) return;
-          setZoomMode("fit-width");
-          break;
-        case "h":
-        case "H":
-          if (withCtrl) return;
-          setZoomMode("fit-height");
-          break;
-        case "f":
-        case "F":
-          if (withCtrl) return;
-          h.toggleFocus();
-          break;
-        case "F11":
-          h.toggleFocus();
-          break;
-        case "n":
-        case "N":
-          if (withCtrl) return;
-          setNotesOpen((open) => !open);
-          break;
-        case "Escape":
-          h.escape();
-          break;
-        default:
-          return;
-      }
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  return (
-    <div className="relative h-full overflow-hidden bg-reader" onPointerMove={chrome.poke}>
-      <ReaderToolbar
-        title={book.title}
-        page={page}
-        pageCount={pageCount}
-        zoom={resolvedZoom}
-        zoomMode={zoomMode}
-        visible={chromeVisible}
-        onBack={back}
-        onGoTo={goTo}
-        onZoom={zoom}
-        onZoomMode={setZoomMode}
-        focusMode={focus}
-        onToggleFocus={toggleFocus}
-        notesOpen={notesOpen}
-        pageHasNotes={notes.pages.includes(page)}
-        onToggleNotes={() => setNotesOpen((open) => !open)}
-      />
-      <div className="flex h-full">
-        <main className="relative min-w-0 flex-1" onPointerEnter={chrome.poke}>
-          <PageView
-            renderer={renderer}
-            page={page}
-            zoomMode={zoomMode}
-            customZoom={customZoom}
-            onZoomResolved={setResolvedZoom}
-            onFlip={flip}
-          />
-          <PageScrubber
-            page={page}
-            pageCount={pageCount}
-            markedPages={notes.pages}
-            visible={chromeVisible}
-            onGoTo={goTo}
-          />
-        </main>
-        {notesOpen && (
-          <div className="pt-14">
-            <NotesPanel
-              page={page}
-              notes={notes}
-              onGoTo={goTo}
-              onClose={() => setNotesOpen(false)}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Toolbar and scrubber fade out after a moment without pointer movement. */
-function useChromeVisibility() {
-  const [visible, setVisible] = useState(true);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const scheduleHide = useCallback(() => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      // Keep the chrome while the user is typing in it (e.g. the page input).
-      if (!isTyping(document.activeElement)) setVisible(false);
-    }, CHROME_IDLE_MS);
-  }, []);
-
-  const poke = useCallback(() => {
-    setVisible(true);
-    scheduleHide();
-  }, [scheduleHide]);
-
-  useEffect(() => {
-    scheduleHide();
-    return () => clearTimeout(timer.current);
-  }, [scheduleHide]);
-
-  return { visible, poke };
 }

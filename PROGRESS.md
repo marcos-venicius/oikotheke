@@ -5,8 +5,8 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 ## Status
 
-**Current phase:** EPUB support (plan in `CLAUDE.md`) — phases 1 (locations) and 2 (import) done
-**Next step:** EPUB phase 3 (foliate-js reader, autosave and resume). Other candidate follow-ups (not started):
+**Current phase:** EPUB support (plan in `CLAUDE.md`) — phases 1–3 (locations, import, reader) done
+**Next step:** EPUB phase 4 (notes at a CFI location, indicators, annotated-location navigation, details page). Other candidate follow-ups (not started):
 - Continuous-scroll reading mode (virtualized, reusing `PageRenderer`).
 - Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
 - Sort/search on the shelf by title/author.
@@ -30,6 +30,16 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
+
+## EPUB phase 3: reader (2026-09-28)
+
+- `ReaderPage` loads the book and picks `PdfReader` (former `ReaderPage`, `git mv`) or `EpubReader`. Shared: `readerChrome.ts` (`isTyping`, `useChromeVisibility`), `ReaderStatus.tsx`, `useProgressSaver.ts`. `useReaderDocument(book)` now takes the book. URL helpers + `fetchRange` moved to `services/bookFile.ts`.
+- EPUB loading (`epubService.openEpub`): **@zip.js/zip.js 2.18** `ZipReader` over a `RangeReader extends Reader` (fetchRange through `oikotheke://`), fed to foliate-js `EPUB` via a custom loader. foliate's vendored zip.js can't be used for this: it doesn't export `Reader`, and zip.js needs a real subclass (it uses `reader.readable`). The user's EPUB opened with ~40 range requests, no full read.
+- `EpubReader`: creates `<foliate-view>`, listens to `relocate` (fraction, cfi, tocItem → autosave `{location: cfi, progress, zoomMode: null}`), `load` (attach keydown/pointermove inside iframes — events there never reach the window), `external-link` (preventDefault + toast). Layout attributes `max-inline-size 720px`, `gap 7%`, `margin 56px`; `flow` paginated|scrolled. Prefs are global settings `epub.fontSize`/`epub.flow` (`useEpubPrefs`); the book opens only after prefs load.
+- Theme: the paginator paints each section's computed background in its own layer at load time, so page color must go through `--theme-bg-color` (set on `html` in `contentCss`). Theme tokens are read in a `requestAnimationFrame`: ThemeProvider's effect (parent) runs after the reader's. Dark mode forces text color; only `img` gets a white backing (not `svg`: cover pages wrap the image in a full-width svg).
+- **Security** (see CLAUDE.md "Book content is untrusted"): `tauri dev` applies **no CSP** — a hostile EPUB fetched remote CSS/JS/image/font/iframe from a logging `python3 -m http.server` in dev. Release with CSP only: zero requests, no script ran, but that hostile book failed to open (fails closed). Added `services/epubSanitize.ts` via foliate's `transformTarget` `data` event (jsdom-based tests). Release with CSP + sanitizer: hostile book opens, zero requests, no script. CSP additions: `frame-src blob:`, `style-src … blob:`, `font-src … blob:`.
+- Verified in the app (scratch XDG, copy of the real library + the user's EPUB): open, flip, contents jump, chapter label, 120% font, dark theme, scrolled flow, leave + reopen at the same place (7%), shelf shows 7%, PDF reader still reopens at 29/601. 32 vitest tests, Rust unchanged (54).
+- Hostile EPUB recipe (scratch `epubs/hostile.epub`): inline `<script>` turning the page red + `parent` outline, packaged `evil.js`, remote `<script src>`, `<link rel=stylesheet>`, `@font-face url()`, `<img>`, `<iframe>`, `<img onerror>`, external `<a>`; all pointing at `http://127.0.0.1:8765`.
 
 ## EPUB phase 2: import (2026-09-28)
 

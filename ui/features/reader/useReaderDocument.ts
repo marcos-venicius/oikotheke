@@ -1,19 +1,17 @@
 import { useEffect, useState } from "react";
 import type { Book } from "@/lib/types";
 import { describeError } from "@/services/ipc";
-import { libraryService } from "@/services/libraryService";
 import { openDocument } from "@/services/pdfService";
 import { PageRenderer } from "./pageRenderer";
 
 type State =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; book: Book; renderer: PageRenderer };
+  | { status: "ready"; renderer: PageRenderer };
 
-/** Loads the book and opens its document once for the whole reading session. */
-export function useReaderDocument(bookId: string): State {
-  // Tagged with the book it belongs to, so switching books shows "loading" without a reset.
-  const [state, setState] = useState<State & { bookId?: string }>({ status: "loading" });
+/** Opens the book's PDF once for the whole reading session. */
+export function useReaderDocument(book: Book): State {
+  const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
     let active = true;
@@ -22,17 +20,13 @@ export function useReaderDocument(bookId: string): State {
 
     (async () => {
       try {
-        const book = await libraryService.getBook(bookId);
-        if (book.status === "missing") throw new Error("The stored copy of this book is missing.");
-        // EPUB reading arrives in the next phase (see CLAUDE.md).
-        if (book.format !== "pdf") throw new Error("Reading EPUB books is not available yet.");
         task = openDocument(book);
         const doc = await task.promise;
         if (!active) return;
         renderer = new PageRenderer(doc);
-        setState({ status: "ready", book, renderer, bookId });
+        setState({ status: "ready", renderer });
       } catch (error) {
-        if (active) setState({ status: "error", message: describeError(error), bookId });
+        if (active) setState({ status: "error", message: describeError(error) });
       }
     })();
 
@@ -41,7 +35,7 @@ export function useReaderDocument(bookId: string): State {
       renderer?.destroy();
       void task?.destroy();
     };
-  }, [bookId]);
+  }, [book]);
 
-  return state.bookId === bookId ? state : { status: "loading" };
+  return state;
 }
