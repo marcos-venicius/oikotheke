@@ -5,10 +5,13 @@ import type { Book } from "@/lib/types";
 import { useTheme } from "@/app/theme";
 import { toast } from "@/components/toast";
 import { openEpub } from "@/services/epubService";
+import { describeError } from "@/services/ipc";
+import { linkService, webUrl } from "@/services/linkService";
 import { contentCss, stepFontSize, type EpubFlow } from "./epubStyles";
 import { EpubToolbar } from "./EpubToolbar";
 import { FractionScrubber } from "./FractionScrubber";
-import { isTyping, useChromeVisibility } from "./readerChrome";
+import { OpenLinkDialog } from "./OpenLinkDialog";
+import { ignoresShortcuts, useChromeVisibility } from "./readerChrome";
 import { ReaderError, ReaderLoading } from "./ReaderStatus";
 import { TocPanel } from "./TocPanel";
 import { useEpubPrefs } from "./useEpubPrefs";
@@ -31,6 +34,7 @@ export function EpubReader({ book }: { book: Book }) {
   const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState<Position>({ fraction: book.progress });
   const [tocOpen, setTocOpen] = useState(false);
+  const [pendingLink, setPendingLink] = useState<URL | null>(null);
   const { prefs, update } = useEpubPrefs();
   const { resolved: theme } = useTheme();
   const chrome = useChromeVisibility();
@@ -79,7 +83,7 @@ export function EpubReader({ book }: { book: Book }) {
   });
 
   const onKey = useCallback((e: KeyboardEvent) => {
-    if (isTyping(e.target) || e.altKey || e.metaKey || e.ctrlKey) return;
+    if (ignoresShortcuts(e.target) || e.altKey || e.metaKey || e.ctrlKey) return;
     const h = handlers.current;
     switch (e.key) {
       case "ArrowRight":
@@ -144,12 +148,14 @@ export function EpubReader({ book }: { book: Book }) {
           doc.addEventListener("keydown", onKey);
           doc.addEventListener("pointermove", () => handlers.current.poke());
         });
-        // Books may link to websites; the reader never opens them (local-first, no tracking).
+        // Links to websites open in the system browser, and only after the user confirms.
+        // Cancelling the event stops foliate-js from calling window.open itself.
         el.addEventListener("external-link", (e) => {
           e.preventDefault();
-          toast("Web links are disabled", {
-            description: (e as CustomEvent<{ href: string }>).detail.href,
-          });
+          const href = (e as CustomEvent<{ href: string }>).detail.href;
+          const url = webUrl(href);
+          if (url) setPendingLink(url);
+          else toast("This link can't be opened", { description: href });
         });
         await el.open(epub);
         for (const [name, value] of Object.entries(LAYOUT)) el.renderer.setAttribute(name, value);
@@ -230,6 +236,18 @@ export function EpubReader({ book }: { book: Book }) {
           )}
         </main>
       </div>
+      <OpenLinkDialog
+        url={pendingLink}
+        onCancel={() => setPendingLink(null)}
+        onConfirm={(url) => {
+          setPendingLink(null);
+          linkService
+            .openInBrowser(url)
+            .catch((err) =>
+              toast("Could not open the link", { tone: "error", description: describeError(err) }),
+            );
+        }}
+      />
       <FractionScrubber
         fraction={position.fraction}
         label={position.chapter}

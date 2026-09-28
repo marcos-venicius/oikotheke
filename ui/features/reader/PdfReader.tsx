@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import type { Book, ZoomMode } from "@/lib/types";
 import { pdfLocation, pdfPage, pdfProgress } from "@/lib/location";
 import { NotesPanel } from "./NotesPanel";
-import { isTyping, useChromeVisibility } from "./readerChrome";
+import { ignoresShortcuts, useChromeVisibility } from "./readerChrome";
 import { ReaderError, ReaderLoading } from "./ReaderStatus";
 import { PageScrubber } from "./PageScrubber";
 import { PageView } from "./PageView";
@@ -77,7 +77,7 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target) || e.altKey || e.metaKey) return;
+      if (ignoresShortcuts(e.target) || e.altKey || e.metaKey) return;
       const h = handlers.current;
       const withCtrl = e.ctrlKey;
       switch (e.key) {

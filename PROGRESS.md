@@ -31,6 +31,12 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## Book links (2026-09-28)
+
+- User request: clicking a web link in a book asks for confirmation, then opens it in the system browser. `tauri-plugin-opener` 2.6 (official; pulls zbus/zvariant on Linux, ~580 Cargo.lock lines) with a capability scoped to `http://*`/`https://*` only (not `opener:default`, which adds mailto/tel/reveal). `services/linkService.ts` (`webUrl`, `openInBrowser`), `reader/OpenLinkDialog.tsx` (host + full URL, focus starts on Cancel). Non-web schemes get a toast.
+- Reader shortcuts are ignored while a `<dialog open>` exists (`ignoresShortcuts`), so Esc closes the dialog without leaving the book.
+- Verified with fake `xdg-open`/`gio` scripts first on `PATH` (they log the URL instead of launching the user's browser): Esc → nothing opened; Open link → exactly one `xdg-open http://127.0.0.1:8765/clicked-link`.
+
 ## EPUB phase 3: reader (2026-09-28)
 
 - `ReaderPage` loads the book and picks `PdfReader` (former `ReaderPage`, `git mv`) or `EpubReader`. Shared: `readerChrome.ts` (`isTyping`, `useChromeVisibility`), `ReaderStatus.tsx`, `useProgressSaver.ts`. `useReaderDocument(book)` now takes the book. URL helpers + `fetchRange` moved to `services/bookFile.ts`.

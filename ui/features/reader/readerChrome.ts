@@ -10,6 +10,11 @@ export function isTyping(target: EventTarget | null): boolean {
   );
 }
 
+/** Reader shortcuts are off while typing or while a dialog is open (it handles its own keys). */
+export function ignoresShortcuts(target: EventTarget | null): boolean {
+  return isTyping(target) || document.querySelector("dialog[open]") !== null;
+}
+
 /** Toolbar and scrubber fade out after a moment without pointer movement. */
 export function useChromeVisibility() {
   const [visible, setVisible] = useState(true);

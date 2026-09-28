@@ -38,6 +38,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, protocol::handle)
         .setup(move |app| {
             migration.log();

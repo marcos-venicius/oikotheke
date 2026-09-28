@@ -390,11 +390,15 @@ layers enforce it instead:
    `<base>`, meta refresh, and every remote URL in resource attributes and CSS are removed.
    foliate-js already drops packaged scripts.
 
-Links to websites are never opened (the reader shows the URL instead). `tauri dev` does **not**
+Links to websites (`http`/`https` only) open in the system browser, never inside the app, and
+only after the user confirms a dialog that shows the real destination (host first — link text
+can say anything). Other schemes are refused. The opener permission is scoped to `http://*`
+and `https://*` (`capabilities/default.json`); don't widen it to `opener:default`. `tauri dev` does **not**
 apply the CSP, so only the sanitizer protects dev builds. Any change to the reader, the CSP or
 the sanitizer must be re-verified with a hostile EPUB (inline, packaged and remote scripts,
 `onerror`, remote image/CSS/font/iframe, external link) against a local server that logs
-requests, in a release build: no request may reach the server and no script may run.
+requests, in a release build: no request may reach the server and no script may run; the
+external link must only open after confirmation.
 
 ## UX
 
@@ -444,7 +448,8 @@ Persistence (Rust)
 - **React 19 + TypeScript + Vite** in `ui/` (not `src/`); alias `@/` → `ui/`.
 - **Tailwind CSS v4** with CSS-variable design tokens; **pdf.js** for PDF parsing/rendering;
   **foliate-js** + **@zip.js/zip.js** for EPUB reading (`zip` + `quick-xml` in Rust for import);
-  react-router (MemoryRouter); lucide-react icons. jsdom is a test-only dependency (DOM tests).
+  react-router (MemoryRouter); lucide-react icons; `tauri-plugin-opener` for confirmed web
+  links. jsdom is a test-only dependency (DOM tests).
 
 Dependency versions are recent (pdfjs-dist 6, react-router 8, TypeScript 6, ESLint 10,
 vitest 5): check the installed typings in `node_modules` before assuming an API.
