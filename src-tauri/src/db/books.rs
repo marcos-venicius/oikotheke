@@ -1,11 +1,11 @@
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::error::{AppError, AppResult};
-use crate::models::{now_ms, Book, BookMetadata, BookStatus};
+use crate::models::{now_ms, Book, BookMetadata, BookStatus, ReadingProgress};
 
 const SELECT: &str = "
     SELECT b.id, b.title, b.author, b.file_path, b.cover_path, b.page_count, b.current_page,
-           b.zoom_level, b.file_size, b.status, b.removed_at, b.created_at, b.updated_at,
+           b.zoom_level, b.zoom_mode, b.file_size, b.status, b.removed_at, b.created_at, b.updated_at,
            (SELECT COUNT(*) FROM notes n WHERE n.book_id = b.id) AS note_count
     FROM books b";
 
@@ -19,12 +19,13 @@ fn from_row(row: &Row) -> rusqlite::Result<Book> {
         page_count: row.get(5)?,
         current_page: row.get(6)?,
         zoom_level: row.get(7)?,
-        file_size: row.get(8)?,
-        status: BookStatus::parse(&row.get::<_, String>(9)?),
-        removed_at: row.get(10)?,
-        created_at: row.get(11)?,
-        updated_at: row.get(12)?,
-        note_count: row.get(13)?,
+        zoom_mode: row.get(8)?,
+        file_size: row.get(9)?,
+        status: BookStatus::parse(&row.get::<_, String>(10)?),
+        removed_at: row.get(11)?,
+        created_at: row.get(12)?,
+        updated_at: row.get(13)?,
+        note_count: row.get(14)?,
     })
 }
 
@@ -112,17 +113,18 @@ pub fn set_removed(conn: &Connection, id: &str, removed: bool) -> AppResult<()> 
     ensure_changed(changed, id)
 }
 
-pub fn update_progress(
-    conn: &Connection,
-    id: &str,
-    current_page: i64,
-    zoom_level: Option<f64>,
-) -> AppResult<()> {
+pub fn update_progress(conn: &Connection, id: &str, progress: &ReadingProgress) -> AppResult<()> {
     let changed = conn.execute(
         "UPDATE books SET current_page = MAX(1, MIN(?2, MAX(page_count, 1))),
-                zoom_level = ?3, updated_at = ?4
+                zoom_level = ?3, zoom_mode = ?4, updated_at = ?5
          WHERE id = ?1",
-        params![id, current_page, zoom_level, now_ms()],
+        params![
+            id,
+            progress.current_page,
+            progress.zoom_level,
+            progress.zoom_mode,
+            now_ms()
+        ],
     )?;
     ensure_changed(changed, id)
 }
@@ -189,9 +191,17 @@ mod tests {
         };
         finalize(&conn, "a", &meta, None).unwrap();
 
-        update_progress(&conn, "a", 42, Some(1.5)).unwrap();
-        assert_eq!(get(&conn, "a").unwrap().current_page, 10);
-        update_progress(&conn, "a", -3, None).unwrap();
+        let progress = |page| ReadingProgress {
+            current_page: page,
+            zoom_level: Some(1.5),
+            zoom_mode: Some("custom".into()),
+        };
+        update_progress(&conn, "a", &progress(42)).unwrap();
+        let book = get(&conn, "a").unwrap();
+        assert_eq!(book.current_page, 10);
+        assert_eq!(book.zoom_level, Some(1.5));
+        assert_eq!(book.zoom_mode.as_deref(), Some("custom"));
+        update_progress(&conn, "a", &progress(-3)).unwrap();
         assert_eq!(get(&conn, "a").unwrap().current_page, 1);
     }
 

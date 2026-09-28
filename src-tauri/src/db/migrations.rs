@@ -4,7 +4,9 @@ use crate::error::AppResult;
 
 /// Ordered schema migrations. Index + 1 is the `user_version` after applying it.
 /// Never edit an existing entry; append a new one instead.
-const MIGRATIONS: &[&str] = &[r#"
+const MIGRATIONS: &[&str] = &[
+    // 1: initial schema
+    r#"
 CREATE TABLE books (
     id           TEXT PRIMARY KEY,
     title        TEXT NOT NULL,
@@ -35,7 +37,10 @@ CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-"#];
+"#,
+    // 2: how the reader sizes pages ('fit-page' | 'fit-width' | 'custom'; custom uses zoom_level).
+    "ALTER TABLE books ADD COLUMN zoom_mode TEXT;",
+];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {
     let version: usize = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;

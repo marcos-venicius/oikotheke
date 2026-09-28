@@ -1,5 +1,7 @@
 export type BookStatus = "importing" | "ready" | "missing";
 
+export type ZoomMode = "fit-page" | "fit-width" | "custom";
+
 export interface Book {
   id: string;
   title: string;
@@ -9,6 +11,7 @@ export interface Book {
   pageCount: number;
   currentPage: number;
   zoomLevel: number | null;
+  zoomMode: ZoomMode | null;
   fileSize: number;
   status: BookStatus;
   removedAt: number | null;
@@ -39,3 +42,9 @@ export interface ImportJob {
 }
 
 export type ThemePreference = "light" | "dark" | "system";
+
+export interface ReadingProgress {
+  currentPage: number;
+  zoomLevel: number | null;
+  zoomMode: ZoomMode;
+}

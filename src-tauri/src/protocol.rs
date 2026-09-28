@@ -84,6 +84,7 @@ fn serve_file(path: &PathBuf, range: Option<&str>) -> std::io::Result<HttpRespon
         .header(header::CACHE_CONTROL, "no-cache");
 
     let Some(range) = range else {
+        log::debug!("pdfshelf full read ({} KB) of {:?}", len / 1024, path);
         let mut body = Vec::with_capacity(len as usize);
         file.read_to_end(&mut body)?;
         return Ok(builder.status(StatusCode::OK).body(body).unwrap());
@@ -95,6 +96,11 @@ fn serve_file(path: &PathBuf, range: Option<&str>) -> std::io::Result<HttpRespon
             .body(Vec::new())
             .unwrap());
     };
+    log::debug!(
+        "pdfshelf range {start}-{end} ({} KB) of {:?}",
+        (end - start + 1) / 1024,
+        path.file_name()
+    );
     file.seek(SeekFrom::Start(start))?;
     let mut body = vec![0u8; (end - start + 1) as usize];
     file.read_exact(&mut body)?;

@@ -54,6 +54,7 @@ pub struct Book {
     pub page_count: i64,
     pub current_page: i64,
     pub zoom_level: Option<f64>,
+    pub zoom_mode: Option<String>,
     pub file_size: i64,
     pub status: BookStatus,
     pub removed_at: Option<i64>,
@@ -80,4 +81,12 @@ pub struct BookMetadata {
     pub title: String,
     pub author: Option<String>,
     pub page_count: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingProgress {
+    pub current_page: i64,
+    pub zoom_level: Option<f64>,
+    pub zoom_mode: Option<String>,
 }

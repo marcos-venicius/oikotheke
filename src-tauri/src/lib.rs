@@ -22,7 +22,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
+                .level(if cfg!(debug_assertions) {
+                    log::LevelFilter::Debug
+                } else {
+                    log::LevelFilter::Info
+                })
+                .level_for("tao", log::LevelFilter::Info)
+                .level_for("wry", log::LevelFilter::Info)
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
@@ -56,6 +62,7 @@ pub fn run() {
             commands::library::remove_book,
             commands::library::restore_book,
             commands::library::delete_book,
+            commands::progress::save_progress,
             commands::settings::get_settings,
             commands::settings::set_setting,
         ])

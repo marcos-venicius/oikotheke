@@ -11,8 +11,11 @@ export type PDFPageProxy = pdfjs.PDFPageProxy;
 export type PDFLoadingTask = pdfjs.PDFDocumentLoadingTask;
 
 const SCHEME = "pdfshelf";
-/** pdf.js fetches the file in chunks of this size, only where it needs data. */
-const RANGE_CHUNK = 256 * 1024;
+/**
+ * pdf.js fetches the file in chunks of this size, only where it needs data. Kept small because
+ * opening a document walks the page tree (`checkLastPage`), touching one chunk per page object.
+ */
+const RANGE_CHUNK = 64 * 1024;
 /** Must stay below the backend's per-response cap (16 MB). */
 const MAX_FETCH = 8 * 1024 * 1024;
 const COVER_WIDTH = 480;
