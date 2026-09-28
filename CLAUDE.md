@@ -1,257 +1,216 @@
 # PDF Shelf
 
-## Visão geral
+## Keeping this file current
 
-O **PDF Shelf** é uma aplicação desktop para organizar, ler e fazer anotações em arquivos PDF localmente.
+**This file is the source of truth for the product and its rules. Whenever a change affects
+anything described here — product behavior, scope, data model, storage layout, architecture,
+stack, conventions or principles — update this file in the same change.** Do not let it drift
+from the code. Implementation details, progress and gotchas go in `PROGRESS.md` (see
+[Development](#development)); product-level decisions and rules go here.
 
-A aplicação funciona como uma **estante digital de livros**: o usuário importa seus PDFs, organiza sua biblioteca e pode abrir qualquer documento em uma experiência de leitura semelhante à de um livro.
+## Overview
 
-O princípio fundamental do produto é **local-first**:
+**PDF Shelf** is a desktop application to organize, read and annotate PDF files locally.
 
-* Todos os arquivos permanecem na máquina do usuário.
-* Nenhum PDF precisa ser enviado para um servidor.
-* As informações da biblioteca, progresso de leitura e anotações também devem ser armazenadas localmente.
-* A aplicação deve continuar funcionando sem conexão com a internet.
+It works as a **digital bookshelf**: the user imports PDFs, organizes the library and opens
+any document in a book-like reading experience.
 
-## Objetivos
+The core principle is **local-first**:
 
-O produto deve permitir que o usuário:
+- All files stay on the user's machine.
+- No PDF is ever uploaded to a server.
+- Library information, reading progress and notes are stored locally.
+- The application works fully offline.
 
-1. Importe PDFs para sua biblioteca.
-2. Mantenha uma cópia própria dos PDFs dentro do armazenamento gerenciado pela aplicação.
-3. Visualize todos os PDFs em uma biblioteca semelhante a uma estante.
-4. Abra um PDF em uma interface de leitura otimizada.
-5. Continue automaticamente a leitura de onde parou.
-6. Adicione notas associadas a páginas específicas.
-7. Consulte e edite suas notas posteriormente.
-8. Gerencie sua biblioteca sem depender de serviços externos.
+**Status:** v1 is complete (library, reader, progress, notes, book details, hardening, Linux
+install). EPUB support is being considered as the next feature; it is not designed yet and
+must be specified here before it is implemented.
 
-## Princípios do produto
+## Goals
+
+The user must be able to:
+
+1. Import PDFs into the library.
+2. Keep an app-owned copy of each PDF inside app-managed storage.
+3. See all PDFs in a shelf-like library.
+4. Open a PDF in an optimized reading interface.
+5. Resume reading automatically where they left off.
+6. Add notes tied to specific pages.
+7. Review and edit notes later.
+8. Manage the library without any external service.
+
+## Product principles
 
 ### Local-first
 
-Os dados pertencem ao usuário e devem permanecer na máquina local.
+Data belongs to the user and stays on the local machine.
 
-Não assumir a existência de:
+Do not assume any of:
 
-* Backend remoto.
-* Conta de usuário.
-* Login.
-* Sincronização em nuvem.
-* Upload de PDFs.
-* Serviços externos para armazenamento.
+- Remote backend.
+- User account.
+- Login.
+- Cloud sync.
+- PDF upload.
+- External storage services.
 
-Qualquer funcionalidade futura de sincronização deve ser adicionada posteriormente e não deve ser necessária para o funcionamento básico da aplicação.
+Any future sync feature must be additive and never required for basic use.
 
-### Preservação dos arquivos
+### File preservation
 
-Quando o usuário importar um PDF, a aplicação deve **copiar o arquivo para um diretório próprio**, gerenciado pela aplicação.
-
-A aplicação não deve depender do arquivo original continuar no mesmo local.
-
-Exemplo:
+On import, the app **copies the file into its own managed directory**:
 
 ```text
-Usuário importa:
-~/Downloads/livro.pdf
+User imports:
+~/Downloads/book.pdf
 
-A aplicação copia para:
+The app copies it to:
 <app-data>/library/<book-id>/book.pdf
 ```
 
-Depois da importação, o usuário pode:
+After import the user may move, rename or delete the original, and the managed copy keeps
+working. The app always works with its own copy after import.
 
-* mover o arquivo original;
-* renomear o arquivo original;
-* apagar o arquivo original;
+## Library
 
-e a cópia gerenciada pela aplicação continuará disponível.
+The main screen is a digital bookshelf. Each imported PDF is a book/document.
 
-A aplicação deve trabalhar sempre com sua própria cópia após a importação.
+Each library item shows at least:
 
-## Biblioteca
+- Cover/thumbnail.
+- Title.
+- Basic document info.
+- Reading progress.
+- A visual indicator when the book has notes.
+- A way to open the book.
 
-A tela principal deve funcionar como uma estante digital.
+The layout must feel like a library, not a plain file list.
 
-Cada PDF importado representa um livro/documento.
+### Import
 
-Cada item da biblioteca deve apresentar, no mínimo:
+Users import PDFs through:
 
-* Capa ou thumbnail do PDF.
-* Título.
-* Informações básicas do documento.
-* Progresso de leitura.
-* Indicação visual caso existam notas.
-* Possibilidade de abrir o documento.
+- A file picker.
+- Drag and drop, where the platform supports it.
 
-O layout deve priorizar uma experiência visual de biblioteca, e não uma simples lista de arquivos.
+Import flow:
 
-### Importação
+1. Validate the file is a PDF (`%PDF-` signature within the first 1024 bytes).
+2. Generate a unique book id (UUID).
+3. Copy the file to `library/.staging-<id>/` on a background worker, reporting progress.
+4. Atomically move it into `library/<id>/` and create the book row with status `importing`.
+5. Extract metadata (title, author, page count) with pdf.js.
+6. Render a cover (`cover.jpg`) from the first page, when possible.
+7. Mark the book `ready` and show it in the library.
 
-O usuário deve conseguir importar PDFs através de:
+Import must handle large files and never load a whole PDF into memory unnecessarily. The UI
+must never block while files are copied.
 
-* Seletor de arquivos.
-* Drag and drop, quando suportado pela plataforma.
+### Removal
 
-Ao importar um PDF:
+Removal offers two explicit, distinct actions:
 
-1. Validar que o arquivo é um PDF.
-2. Gerar um identificador único para o livro.
-3. Criar o diretório interno do livro.
-4. Copiar o PDF para o armazenamento da aplicação.
-5. Extrair metadados úteis do PDF.
-6. Gerar uma capa/thumbnail para a biblioteca, quando possível.
-7. Criar o registro do livro no banco de dados local.
-8. Abrir ou disponibilizar o livro na biblioteca.
+- **Remove from library** — soft delete: the book is hidden, files and notes are kept, and it
+  can be restored.
+- **Delete permanently** — the book row, its notes and its files are deleted (via
+  `library/.trash-<id>` so a crash cannot leave a half-deleted book).
 
-A importação deve ser resiliente a arquivos grandes e não deve carregar o PDF inteiro na memória desnecessariamente.
+Never delete files without an explicit user action.
 
-## Armazenamento
+## Storage
 
-A aplicação deve separar:
+The app separates:
 
-1. **Arquivos binários**
+1. **Binary files** — PDFs, covers and other derived assets, on disk.
+2. **Metadata** — books, reading progress, notes and settings, in a SQLite database.
 
-   * PDFs.
-   * Thumbnails/capas.
-   * Outros assets derivados.
-
-2. **Metadados**
-
-   * Informações dos livros.
-   * Progresso de leitura.
-   * Notas.
-   * Configurações relacionadas à biblioteca.
-
-Uma estrutura conceitual pode ser:
+Layout (under the platform app-data dir, e.g. `~/.local/share/com.pdfshelf.app/` on Linux):
 
 ```text
 <app-data>/
 ├── library/
-│   ├── <book-id>/
-│   │   ├── book.pdf
-│   │   └── cover.*
-│   │
 │   └── <book-id>/
 │       ├── book.pdf
-│       └── cover.*
-│
-└── database.*
+│       └── cover.jpg
+├── logs/
+└── pdf-shelf.db
 ```
 
-A estrutura física exata pode variar de acordo com a tecnologia escolhida.
+- Paths stored in the database are relative to the app-data dir.
+- Timestamps are Unix milliseconds.
+- Never hardcode OS-specific paths; use the directories provided by the framework.
 
-O código não deve assumir caminhos fixos específicos do sistema operacional. Usar os diretórios apropriados fornecidos pelo sistema/framework.
+## PDF reader
 
-## Leitor de PDF
+Opening a book enters a book-like reading experience. The reader:
 
-Ao clicar em um livro, o usuário deve entrar em uma experiência de leitura semelhante à leitura de um livro.
+- Shows one page at a time, sized to the window.
+- Navigates forward/back (buttons, keyboard, page scrubber).
+- Jumps directly to a page.
+- Shows the current page and total page count.
+- Supports zoom and fit modes: fit page, fit width, fit height, custom zoom.
+- Has a focus mode (full screen, minimal chrome).
+- Returns to the library/book page.
 
-O leitor deve:
+Reading comfort comes first: keep visible controls to a minimum.
 
-* Exibir uma página por vez ou uma visualização contínua adequada ao tamanho da tela.
-* Permitir navegar entre páginas.
-* Permitir avançar e voltar.
-* Permitir ir diretamente para uma página.
-* Exibir o número da página atual e o total de páginas.
-* Permitir zoom.
-* Permitir ajustar a visualização ao tamanho da tela.
-* Permitir sair do leitor e retornar à biblioteca.
+Large files are streamed: the PDF is served through the `pdfshelf://` protocol with HTTP Range
+requests, and only a small window of pages around the current one is rendered.
 
-A experiência deve priorizar leitura confortável e reduzir elementos de interface desnecessários.
+## Reading progress
 
-## Persistência do progresso
-
-A aplicação deve salvar automaticamente a posição de leitura do usuário.
-
-Para cada livro, armazenar pelo menos:
+Progress is saved automatically — the user never clicks "Save". Per book we store:
 
 ```text
 currentPage
+zoomMode   (fit-page | fit-width | fit-height | custom)
+zoomLevel  (used when zoomMode = custom)
 ```
 
-Opcionalmente, também podemos armazenar:
+Expected behavior:
 
-```text
-scrollPosition
-zoomLevel
-readingMode
-```
+1. The user opens a book.
+2. The reader opens at the last saved position.
+3. Progress is saved (debounced) while reading.
+4. On leaving the reader or closing the window, the latest position is flushed to disk.
 
-O comportamento esperado é:
+## Notes
 
-1. Usuário abre um livro.
-2. A aplicação identifica a última posição registrada.
-3. O leitor abre diretamente nessa posição.
-4. Enquanto o usuário lê, a aplicação atualiza o progresso.
-5. Ao fechar o livro ou sair do leitor, a posição mais recente deve estar persistida.
+Users create notes tied to a specific page. A page can have multiple notes.
 
-O usuário não deve precisar clicar em "Salvar" para preservar seu progresso.
+Inside the reader the user can:
 
-## Notas
+- Create a note on the current page.
+- See the current page's notes.
+- Edit and delete notes.
+- See which pages have notes, and navigate between annotated pages.
 
-O usuário deve poder criar notas associadas a uma página específica do PDF.
+Notes are persisted automatically. Content is trimmed, non-empty and at most 20,000
+characters; the page must be within the book's page range.
 
-Uma nota deve possuir, no mínimo:
+The book details page also lists a book's notes and can open the reader at a note's page.
 
-```text
-id
-bookId
-pageNumber
-content
-createdAt
-updatedAt
-```
-
-Uma página pode possuir múltiplas notas.
-
-Exemplo:
-
-```text
-Livro: Clean Code
-Página: 42
-
-Nota:
-"Revisar este conceito quando estiver trabalhando no módulo de arquitetura."
-```
-
-### Comportamento
-
-Dentro do leitor, o usuário deve conseguir:
-
-* Criar uma nota na página atual.
-* Visualizar as notas da página atual.
-* Editar uma nota existente.
-* Excluir uma nota.
-* Identificar visualmente quais páginas possuem notas.
-
-As notas devem ser persistidas automaticamente.
-
-### Indicadores
-
-O leitor deve fornecer uma indicação visual quando a página atual possui notas.
-
-Também deve existir uma maneira de localizar rapidamente páginas que possuem anotações.
-
-Uma implementação inicial pode permitir navegar entre páginas anotadas.
-
-## Modelo de dados
-
-O modelo inicial deve ser simples e preparado para evolução.
+## Data model
 
 ### Book
 
 ```text
 Book
-├── id
+├── id           UUID
 ├── title
 ├── author?
-├── filePath
-├── coverPath?
+├── filePath     relative to app-data
+├── coverPath?   relative to app-data
 ├── pageCount
 ├── currentPage
+├── zoomMode?
+├── zoomLevel?
+├── fileSize     bytes
+├── status       importing | ready | missing
+├── removedAt?   set when soft-removed
 ├── createdAt
 ├── updatedAt
+└── noteCount    (computed, not stored)
 ```
 
 ### Note
@@ -259,251 +218,190 @@ Book
 ```text
 Note
 ├── id
-├── bookId
+├── bookId       (cascade delete with the book)
 ├── pageNumber
 ├── content
 ├── createdAt
-├── updatedAt
+└── updatedAt
 ```
 
-O modelo pode ser expandido posteriormente para incluir:
+### Settings
 
-* Tags.
-* Categorias.
-* Favoritos.
-* Status de leitura.
-* Highlights.
-* Bookmarks.
-* Metadados adicionais.
-* Pesquisa no conteúdo.
-* OCR.
+Key/value pairs (e.g. `theme`: light | dark | system).
 
-Essas funcionalidades não fazem parte do escopo inicial.
+Schema changes go through append-only migrations (`src-tauri/src/db/migrations.rs`); never
+edit an existing migration.
 
-## Organização da biblioteca
+## Data integrity
 
-A primeira versão deve manter a organização simples.
+The database and the files on disk must never disagree — e.g. no book row pointing at a
+missing PDF. Import, removal and updates must tolerate failure mid-operation.
 
-O usuário deve conseguir:
+Handled cases:
 
-* Importar livros.
-* Abrir livros.
-* Remover livros da biblioteca.
-* Ver seu progresso de leitura.
-* Identificar livros com anotações.
+- Corrupt PDF (import is rolled back).
+- Copy failure, unreadable file, permission denied, disk full.
+- A managed PDF removed or corrupted inside app storage (book marked `missing`).
+- Unexpected crash during an operation: on startup a reconcile step cleans staging/trash
+  leftovers, drops rows without files, and resumes interrupted imports.
 
-Ao remover um livro, a aplicação deve deixar claro que existem duas possibilidades conceituais:
+## Privacy
 
-* Remover apenas da biblioteca.
-* Remover também a cópia física armazenada pela aplicação.
+By default, book content and notes stay local. Never send to any server:
 
-A implementação deve evitar apagar arquivos sem uma ação explícita do usuário.
+- PDFs or their content.
+- Notes.
+- Reading history.
+- Personal library metadata.
 
-## Integridade dos dados
-
-A aplicação deve evitar estados inconsistentes entre o banco de dados e os arquivos físicos.
-
-Por exemplo, não deve existir um livro registrado no banco apontando para um PDF que não existe.
-
-Operações de importação, remoção e atualização devem considerar possíveis falhas no meio da operação.
-
-A aplicação deve lidar adequadamente com:
-
-* PDF corrompido.
-* Falha durante a cópia.
-* Arquivo sem permissão de leitura.
-* Falta de espaço em disco.
-* PDF removido ou corrompido dentro do armazenamento da aplicação.
-* Interrupção inesperada da aplicação durante uma operação.
-
-## Privacidade
-
-Por padrão, o conteúdo dos livros e das notas deve permanecer local.
-
-Não enviar para servidores:
-
-* PDFs.
-* Conteúdo de PDFs.
-* Notas.
-* Histórico de leitura.
-* Metadados pessoais da biblioteca.
-
-Não adicionar analytics, telemetria ou serviços externos sem uma decisão explícita de produto.
+No analytics, telemetry or external services without an explicit product decision. The
+release build ships with a strict CSP.
 
 ## UX
 
-A interface deve ser simples e centrada em três áreas principais:
+The interface is built around three areas:
 
 ```text
-Biblioteca
-    ↓
-Livro
-    ↓
-Leitor
+Library   → discovery and organization
+   ↓
+Book      → document info, progress and notes
+   ↓
+Reader    → reading, navigation and notes
 ```
 
-### Biblioteca
+Routes: `/` library, `/book/:id` details, `/read/:id` reader. Light, dark and system themes.
+Avoid excess controls while reading; secondary tools live in toolbars, panels or menus.
 
-Foco em descoberta e organização.
+## Architecture
 
-### Livro
-
-Foco em informações do documento e progresso.
-
-### Leitor
-
-Foco em leitura, navegação e anotações.
-
-A interface deve evitar excesso de controles visíveis durante a leitura. Ferramentas secundárias podem ficar em barras de ferramentas ou menus que não atrapalhem o conteúdo.
-
-## Arquitetura
-
-A aplicação deve ser estruturada de forma que a lógica de negócio não fique acoplada à interface.
-
-Separar conceitualmente:
+Business logic must not be coupled to the UI:
 
 ```text
-UI
-│
+UI (ui/features)
 ├── Library
 ├── Book Details
 └── Reader
         │
         ▼
-Application Services
-│
-├── Library Service
-├── PDF Service
-├── Reading Progress Service
-└── Notes Service
+Application services (ui/services → Tauri commands → src-tauri/src/services)
+├── Library service (import, remove, restore, delete, reconcile)
+├── PDF service (pdf.js: metadata, covers, rendering)
+├── Reading progress service
+└── Notes service
         │
         ▼
-Persistence
-│
-├── Local Database
-└── Local File Storage
+Persistence (Rust)
+├── SQLite database (src-tauri/src/db)
+└── Local file storage (src-tauri/src/storage)
 ```
 
-A camada de UI não deve manipular diretamente arquivos ou banco de dados sempre que isso puder ser encapsulado por serviços de aplicação.
+- Rust owns all file and database access. The UI talks to it only through `ui/services/*`.
+- UI components never manipulate files or the database directly.
 
-## Requisitos não funcionais
+## Stack
+
+- **Tauri 2** (Rust): storage, SQLite (rusqlite), import queue, `pdfshelf://` protocol.
+- **React 19 + TypeScript + Vite** in `ui/` (not `src/`); alias `@/` → `ui/`.
+- **Tailwind CSS v4** with CSS-variable design tokens; **pdf.js** for PDF parsing/rendering;
+  react-router (MemoryRouter); lucide-react icons.
+
+Dependency versions are recent (pdfjs-dist 6, react-router 8, TypeScript 6, ESLint 10,
+vitest 5): check the installed typings in `node_modules` before assuming an API.
+
+## Non-functional requirements
 
 ### Performance
 
-* A biblioteca deve abrir rapidamente mesmo com muitos PDFs.
-* Não carregar todos os PDFs completos ao abrir a biblioteca.
-* Thumbnails devem ser carregados sob demanda ou de forma eficiente.
-* Operações de cópia devem ocorrer de forma assíncrona.
-* O leitor deve evitar recarregar o PDF inteiro ao trocar de página.
+- The library opens fast even with many books; it never loads full PDFs.
+- Covers load on demand.
+- File copies are asynchronous.
+- The reader never reloads the whole PDF when changing pages.
 
 ### Offline
 
-Todas as funcionalidades principais devem funcionar completamente offline.
+All core features work fully offline.
 
 ### Cross-platform
 
-Sempre que possível, utilizar APIs de filesystem e diretórios específicos da plataforma fornecidas pelo framework, evitando caminhos hardcoded.
+Use the framework's filesystem and platform-directory APIs; no hardcoded paths. Linux is the
+primary tested platform (`scripts/install.sh` / `scripts/uninstall.sh`).
 
-## Escopo da primeira versão
+## Scope
 
-A primeira versão deve conter somente o necessário para validar o conceito:
+### Delivered in v1
 
-### Biblioteca
+- Library: import (picker + drag and drop), managed copy, shelf with covers and titles,
+  progress and note indicators, remove/restore/delete permanently.
+- Book details page.
+- Reader: navigation, jump to page, zoom and fit modes, focus mode, autosave and resume.
+- Notes: create, edit, delete, per-page view, indicators, annotated-page navigation.
 
-* Importar PDF.
-* Copiar PDF para armazenamento interno.
-* Exibir biblioteca.
-* Exibir capa/thumbnail.
-* Exibir título.
-* Remover livro.
+### Out of scope (for now)
 
-### Leitor
+- Cloud sync, sync across devices.
+- Login, user accounts.
+- Sharing, marketplace, social features.
+- OCR.
+- Automatic translation, AI summarization.
+- Advanced highlights.
+- Editing PDF content or advanced metadata.
+- Complex tagging.
+- DRM.
 
-* Abrir PDF.
-* Navegar entre páginas.
-* Zoom.
-* Ir para uma página específica.
-* Salvar automaticamente a última página.
-* Reabrir na última página.
+These may come later but must not add complexity to the core. Candidate follow-ups are
+tracked in `PROGRESS.md`.
 
-### Anotações
+## Development
 
-* Criar nota em uma página.
-* Editar nota.
-* Excluir nota.
-* Visualizar notas da página.
-* Identificar páginas que possuem notas.
+- `PROGRESS.md` is the living implementation log: status, decisions, known issues, backend
+  and frontend maps, and testing tips. Read it before non-trivial work and keep it updated
+  at the end of every work step.
+- Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`,
+  `cd src-tauri && cargo test`.
+- Everything (code, UI text, commits, docs) is written in English.
+- Commits: Conventional Commits, local only — **never push**. **Never add `Co-Authored-By`
+  or any AI attribution** to commits or PRs.
+- Never use the user's own PDFs for testing; generate test files.
 
-## Fora do escopo inicial
+### Guidelines
 
-Não implementar na primeira versão:
+Prefer simplicity, modularity and maintainable code. Before implementing a feature:
 
-* Cloud sync.
-* Login.
-* Conta de usuário.
-* Compartilhamento de livros.
-* Marketplace.
-* Social features.
-* OCR.
-* Tradução automática.
-* AI summarization.
-* Highlights avançados.
-* Edição do conteúdo do PDF.
-* Edição de metadados avançados.
-* Sistema complexo de tags.
-* DRM.
-* Sincronização entre dispositivos.
+1. Understand the data model it needs.
+2. Decide where the logic lives.
+3. Avoid duplicating logic across screens.
+4. Prefer native APIs and mature libraries.
+5. Keep local storage as the source of truth.
+6. Don't add external dependencies without need.
 
-Essas funcionalidades podem ser consideradas posteriormente, mas não devem aumentar a complexidade da primeira versão.
+When adding a feature, check its impact on:
 
-## Diretrizes para desenvolvimento com IA
+- Persistence.
+- File integrity.
+- Reading progress.
+- Reader performance.
+- Cross-platform compatibility.
+- Data privacy.
+- **This file** — update it if the feature changes anything described here.
 
-A implementação deve priorizar simplicidade, modularidade e código fácil de manter.
+## Main success criterion
 
-Antes de implementar uma funcionalidade:
-
-1. Entender o modelo de dados necessário.
-2. Definir onde a lógica deve existir.
-3. Evitar duplicação de lógica entre telas.
-4. Preferir APIs nativas e bibliotecas maduras.
-5. Manter o armazenamento local como fonte de verdade.
-6. Não introduzir dependências externas sem necessidade.
-
-Ao adicionar uma nova funcionalidade, verificar se ela afeta:
-
-* Persistência.
-* Integridade dos arquivos.
-* Progresso de leitura.
-* Performance do leitor.
-* Compatibilidade entre sistemas operacionais.
-* Privacidade dos dados.
-
-## Critério principal de sucesso
-
-O fluxo fundamental do produto deve funcionar de maneira confiável:
+The core flow must work reliably, including across app restarts:
 
 ```text
-Importar PDF
+Import PDF
     ↓
-PDF é copiado para o armazenamento da aplicação
+PDF is copied into app storage
     ↓
-Livro aparece na biblioteca
+Book appears in the library
     ↓
-Usuário abre o livro
+User opens the book and reads
     ↓
-Usuário lê
+App saves the current page automatically
     ↓
-Aplicação salva automaticamente a página atual
+User adds notes to pages
     ↓
-Usuário adiciona notas às páginas
+User closes the book and reopens it
     ↓
-Usuário fecha o livro
-    ↓
-Usuário abre novamente
-    ↓
-Livro retorna à última página lida
-    ↓
-Notas continuam disponíveis
+Book returns to the last page read, notes still available
 ```
-
-Esse fluxo deve ser tratado como o principal caso de uso e permanecer funcional mesmo após reiniciar a aplicação.

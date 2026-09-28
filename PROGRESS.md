@@ -1,7 +1,7 @@
 # PDF Shelf — Progress
 
 Living log of the v1 implementation. Keep it updated at the end of every work step.
-Product spec: `CLAUDE.md` (Portuguese). Everything else (code, UI, commits, docs) is in English.
+Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). Everything (code, UI, commits, docs) is in English.
 
 ## Status
 
