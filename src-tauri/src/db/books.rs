@@ -71,9 +71,13 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Book> {
         .ok_or_else(|| AppError::NotFound(format!("book {id}")))
 }
 
-/// Books on the shelf (not soft-removed), most recently added first.
+/// Books on the shelf (not soft-removed), most recent activity first: reading (opening a book
+/// saves its position), notes, import and restore all update `updated_at`.
 pub fn list_active(conn: &Connection) -> AppResult<Vec<Book>> {
-    list_where(conn, "b.removed_at IS NULL ORDER BY b.created_at DESC")
+    list_where(
+        conn,
+        "b.removed_at IS NULL ORDER BY b.updated_at DESC, b.created_at DESC",
+    )
 }
 
 pub fn list_removed(conn: &Connection) -> AppResult<Vec<Book>> {
@@ -182,6 +186,15 @@ pub fn set_content_hash(conn: &Connection, id: &str, hash: &str) -> AppResult<()
     Ok(())
 }
 
+/// Records activity on a book without changing anything else (e.g. its notes changed).
+pub fn touch(conn: &Connection, id: &str) -> AppResult<()> {
+    let changed = conn.execute(
+        "UPDATE books SET updated_at = ?2 WHERE id = ?1",
+        params![id, now_ms()],
+    )?;
+    ensure_changed(changed, id)
+}
+
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     conn.execute("DELETE FROM books WHERE id = ?1", [id])?;
     Ok(())
@@ -253,6 +266,36 @@ mod tests {
         assert_eq!(book.progress, 0.7);
         assert_eq!(book.zoom_level, Some(1.5));
         assert_eq!(book.zoom_mode.as_deref(), Some("custom"));
+    }
+
+    #[test]
+    fn shelf_lists_most_recent_activity_first() {
+        let db = Database::open_in_memory().unwrap();
+        let conn = db.conn();
+        for id in ["old", "mid", "new"] {
+            seed(&conn, id);
+        }
+        // Imported in this order, but read in another.
+        let times = [("old", 1, 300), ("mid", 2, 100), ("new", 3, 200)];
+        for (id, created, updated) in times {
+            conn.execute(
+                "UPDATE books SET created_at = ?2, updated_at = ?3 WHERE id = ?1",
+                params![id, created, updated],
+            )
+            .unwrap();
+        }
+        let order = |conn: &Connection| -> Vec<String> {
+            list_active(conn)
+                .unwrap()
+                .into_iter()
+                .map(|b| b.id)
+                .collect()
+        };
+        assert_eq!(order(&conn), ["old", "new", "mid"]);
+
+        touch(&conn, "mid").unwrap();
+        assert_eq!(order(&conn), ["mid", "old", "new"]);
+        assert!(matches!(touch(&conn, "nope"), Err(AppError::NotFound(_))));
     }
 
     #[test]

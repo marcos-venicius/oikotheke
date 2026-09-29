@@ -31,6 +31,11 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## Shelf order by activity (2026-09-29)
+
+- User request: order the shelf by what was read most recently. `books::list_active` now orders by `updated_at DESC, created_at DESC`. `updated_at` already moved on open (the readers save progress on mount), reading, import, restore; notes now also bump it via `books::touch` in `services/notes` (create/update/delete; delete stays idempotent for unknown ids). The shelf re-fetches on every mount, so returning from the reader shows the new order.
+- Verified: 2 Rust tests (61 total); demo library: opening *Frankenstein* (last on the shelf) moved it to first on return.
+
 ## Duplicate imports (2026-09-29)
 
 - User report: importing the same file twice created two books. Now `storage::copy_file` returns `Copied { size, sha256 }` (hash computed while copying; `sha2` was already in the tree), and `library::copy_into_library` checks `find_duplicate` **before** moving staging into place: same `file_size` candidates (`books::same_size`, index `idx_books_size`), comparing `content_hash`, hashing older rows on demand (`hash_file` + `set_content_hash`, DB lock not held while hashing). `missing` books are skipped (reimport recovers them). Error `AppError::Duplicate { title, removed }` → kind `duplicate`, message "“Title” is already in your library" (+ restore hint when soft-removed). Migration 4: `books.content_hash TEXT` + `idx_books_size`. No unique index: pre-existing libraries may already contain duplicates; the app never deletes them on its own.

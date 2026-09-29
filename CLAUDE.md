@@ -101,6 +101,11 @@ Each library item shows at least:
 
 The layout must feel like a library, not a plain file list.
 
+Books are ordered by **most recent activity** (`updated_at`), then by import date: opening a
+book (the reader saves its position right away), reading, writing/editing/deleting notes,
+importing and restoring all count. The book details page shows the same value as "Last
+activity".
+
 ### Import
 
 Users import PDF and EPUB books through:

@@ -39,7 +39,7 @@ pub fn create(
     let book = books::get(&conn, book_id)?;
     let location = location::validate(&book, location)?;
     let label = normalize_label(label);
-    notes::insert(
+    let note = notes::insert(
         &conn,
         &notes::NewNote {
             book_id,
@@ -47,16 +47,30 @@ pub fn create(
             label: label.as_deref(),
             content,
         },
-    )
+    )?;
+    // Writing notes counts as reading activity (the shelf is ordered by it).
+    books::touch(&conn, book_id)?;
+    Ok(note)
 }
 
 pub fn update(db: &Database, id: &str, content: &str) -> AppResult<Note> {
     let content = validate_content(content)?;
-    notes::update(&db.conn(), id, content)
+    let conn = db.conn();
+    let note = notes::update(&conn, id, content)?;
+    books::touch(&conn, &note.book_id)?;
+    Ok(note)
 }
 
 pub fn delete(db: &Database, id: &str) -> AppResult<()> {
-    notes::delete(&db.conn(), id)
+    let conn = db.conn();
+    let note = match notes::get(&conn, id) {
+        Ok(note) => note,
+        // Already gone: deleting stays idempotent.
+        Err(AppError::NotFound(_)) => return Ok(()),
+        Err(err) => return Err(err),
+    };
+    notes::delete(&conn, id)?;
+    books::touch(&conn, &note.book_id)
 }
 
 pub fn list(db: &Database, book_id: &str) -> AppResult<Vec<Note>> {
@@ -109,6 +123,28 @@ mod tests {
             create(&db, "missing", "1", None, "x"),
             Err(AppError::NotFound(_))
         ));
+    }
+
+    #[test]
+    fn note_changes_count_as_book_activity() {
+        let (_dir, db, id) = ready_book(10);
+        let activity = |db: &Database| books::get(&db.conn(), &id).unwrap().updated_at;
+        let reset = |db: &Database| {
+            db.conn()
+                .execute("UPDATE books SET updated_at = 0", [])
+                .unwrap();
+        };
+
+        reset(&db);
+        let note = create(&db, &id, "1", None, "a").unwrap();
+        assert!(activity(&db) > 0);
+        reset(&db);
+        update(&db, &note.id, "b").unwrap();
+        assert!(activity(&db) > 0);
+        reset(&db);
+        delete(&db, &note.id).unwrap();
+        assert!(activity(&db) > 0);
+        delete(&db, &note.id).unwrap(); // idempotent
     }
 
     #[test]
