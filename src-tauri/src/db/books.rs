@@ -3,12 +3,17 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use crate::error::{AppError, AppResult};
 use crate::models::{now_ms, Book, BookFormat, BookMetadata, BookStatus, ReadingProgress};
 
-const SELECT: &str = "
-    SELECT b.id, b.format, b.title, b.author, b.file_path, b.cover_path, b.page_count,
-           b.location, b.progress, b.zoom_level, b.zoom_mode, b.file_size, b.status, b.removed_at,
-           b.created_at, b.updated_at,
-           (SELECT COUNT(*) FROM notes n WHERE n.book_id = b.id) AS note_count
-    FROM books b";
+/// Columns read by `from_row`, in order.
+macro_rules! book_columns {
+    () => {
+        "b.id, b.format, b.title, b.author, b.file_path, b.cover_path, b.page_count,
+         b.location, b.progress, b.zoom_level, b.zoom_mode, b.file_size, b.status, b.removed_at,
+         b.created_at, b.updated_at,
+         (SELECT COUNT(*) FROM notes n WHERE n.book_id = b.id) AS note_count"
+    };
+}
+
+const SELECT: &str = concat!("SELECT ", book_columns!(), " FROM books b");
 
 fn from_row(row: &Row) -> rusqlite::Result<Book> {
     Ok(Book {
@@ -38,19 +43,22 @@ pub struct NewBook<'a> {
     pub title: &'a str,
     pub file_path: &'a str,
     pub file_size: i64,
+    pub content_hash: &'a str,
 }
 
 pub fn insert_importing(conn: &Connection, book: &NewBook) -> AppResult<()> {
     let now = now_ms();
     conn.execute(
-        "INSERT INTO books (id, format, title, file_path, file_size, status, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 'importing', ?6, ?6)",
+        "INSERT INTO books (id, format, title, file_path, file_size, content_hash, status,
+                            created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'importing', ?7, ?7)",
         params![
             book.id,
             book.format.as_str(),
             book.title,
             book.file_path,
             book.file_size,
+            book.content_hash,
             now
         ],
     )?;
@@ -142,6 +150,38 @@ pub fn update_progress(conn: &Connection, id: &str, progress: &ReadingProgress) 
     ensure_changed(changed, id)
 }
 
+/// A book that may hold the same content as a new file: same size, known hash or not yet.
+pub struct Candidate {
+    pub book: Book,
+    pub content_hash: Option<String>,
+}
+
+/// Books of exactly `size` bytes, including soft-removed ones.
+pub fn same_size(conn: &Connection, size: i64) -> AppResult<Vec<Candidate>> {
+    let mut stmt = conn.prepare(concat!(
+        "SELECT ",
+        book_columns!(),
+        ", b.content_hash FROM books b WHERE b.file_size = ?1"
+    ))?;
+    let rows = stmt
+        .query_map([size], |row| {
+            Ok(Candidate {
+                book: from_row(row)?,
+                content_hash: row.get(17)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn set_content_hash(conn: &Connection, id: &str, hash: &str) -> AppResult<()> {
+    conn.execute(
+        "UPDATE books SET content_hash = ?2 WHERE id = ?1",
+        params![id, hash],
+    )?;
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     conn.execute("DELETE FROM books WHERE id = ?1", [id])?;
     Ok(())
@@ -168,6 +208,7 @@ mod tests {
                 title: "draft",
                 file_path: "library/x/book.pdf",
                 file_size: 10,
+                content_hash: id,
             },
         )
         .unwrap();

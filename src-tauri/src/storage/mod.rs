@@ -6,6 +6,8 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
 use crate::epub;
 use crate::error::{AppError, AppResult};
 use crate::models::BookFormat;
@@ -131,11 +133,19 @@ fn is_pdf(path: &Path) -> AppResult<bool> {
     Ok(head.windows(5).any(|w| w == b"%PDF-"))
 }
 
-/// Streams `src` into `dst` in fixed-size chunks and fsyncs it. Never holds the whole file in memory.
-pub fn copy_file(src: &Path, dst: &Path, mut on_progress: impl FnMut(u64)) -> AppResult<u64> {
+pub struct Copied {
+    pub size: u64,
+    /// SHA-256 of the content, hex-encoded; identifies the same book under any file name.
+    pub sha256: String,
+}
+
+/// Streams `src` into `dst` in fixed-size chunks, hashing on the way, and fsyncs it. Never
+/// holds the whole file in memory.
+pub fn copy_file(src: &Path, dst: &Path, mut on_progress: impl FnMut(u64)) -> AppResult<Copied> {
     let mut reader = BufReader::with_capacity(COPY_CHUNK, File::open(src)?);
     let file = File::create(dst)?;
     let mut writer = BufWriter::with_capacity(COPY_CHUNK, file);
+    let mut hasher = Sha256::new();
     let mut buf = vec![0u8; COPY_CHUNK];
     let mut copied = 0u64;
     loop {
@@ -143,13 +153,36 @@ pub fn copy_file(src: &Path, dst: &Path, mut on_progress: impl FnMut(u64)) -> Ap
         if read == 0 {
             break;
         }
+        hasher.update(&buf[..read]);
         writer.write_all(&buf[..read])?;
         copied += read as u64;
         on_progress(copied);
     }
     let file = writer.into_inner().map_err(|e| e.into_error())?;
     file.sync_all()?;
-    Ok(copied)
+    Ok(Copied {
+        size: copied,
+        sha256: hex(&hasher.finalize()),
+    })
+}
+
+/// SHA-256 of a file, read in chunks.
+pub fn hash_file(path: &Path) -> AppResult<String> {
+    let mut reader = BufReader::with_capacity(COPY_CHUNK, File::open(path)?);
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; COPY_CHUNK];
+    loop {
+        let read = reader.read(&mut buf)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buf[..read]);
+    }
+    Ok(hex(&hasher.finalize()))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Writes a small file atomically (temp file + rename).
@@ -200,9 +233,21 @@ mod tests {
 
         let mut calls = 0;
         let copied = copy_file(&src, &dst, |_| calls += 1).unwrap();
-        assert_eq!(copied, data.len() as u64);
+        assert_eq!(copied.size, data.len() as u64);
         assert_eq!(calls, 3);
         assert_eq!(fs::read(&dst).unwrap(), data);
+        assert_eq!(copied.sha256, hash_file(&src).unwrap());
+    }
+
+    #[test]
+    fn hashes_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a");
+        fs::write(&path, b"abc").unwrap();
+        assert_eq!(
+            hash_file(&path).unwrap(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 
     #[test]

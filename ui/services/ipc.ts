@@ -5,6 +5,7 @@ export type AppErrorKind =
   | "unsupportedFormat"
   | "unreadable"
   | "drm"
+  | "duplicate"
   | "permissionDenied"
   | "diskFull"
   | "invalid"

@@ -60,6 +60,12 @@ DROP INDEX idx_notes_book_page;
 ALTER TABLE notes DROP COLUMN page_number;
 CREATE INDEX idx_notes_book ON notes(book_id);
 "#,
+    // 4: content hash (SHA-256) to refuse importing the same book twice. Older rows get theirs
+    // lazily, when a file of the same size is imported.
+    r#"
+ALTER TABLE books ADD COLUMN content_hash TEXT;
+CREATE INDEX idx_books_size ON books(file_size);
+"#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {

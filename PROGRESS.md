@@ -31,6 +31,13 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## Duplicate imports (2026-09-29)
+
+- User report: importing the same file twice created two books. Now `storage::copy_file` returns `Copied { size, sha256 }` (hash computed while copying; `sha2` was already in the tree), and `library::copy_into_library` checks `find_duplicate` **before** moving staging into place: same `file_size` candidates (`books::same_size`, index `idx_books_size`), comparing `content_hash`, hashing older rows on demand (`hash_file` + `set_content_hash`, DB lock not held while hashing). `missing` books are skipped (reimport recovers them). Error `AppError::Duplicate { title, removed }` → kind `duplicate`, message "“Title” is already in your library" (+ restore hint when soft-removed). Migration 4: `books.content_hash TEXT` + `idx_books_size`. No unique index: pre-existing libraries may already contain duplicates; the app never deletes them on its own.
+- The import worker is sequential, so the same file twice in one batch is also caught (the first row stores its hash at insert).
+- Test fixture gotcha: `write_pdf` must produce distinct bytes per name, or tests importing two fake PDFs hit the duplicate check.
+- Verified: 4 new Rust tests (59 total); end-to-end on a copy of the user's real library (schema 3 → 4): re-importing its 3 books and a renamed copy → all refused, no rows/dirs/staging added, old rows got hashes. UI failure toast for the picker path not automated (dev imports bypass the UI job list); message text checked in the log.
+
 ## README screenshots (2026-09-28)
 
 - `docs/screenshots/*.png` (5 images, ~1.8 MB), captured from a dev build in a scratch XDG dir with a 1440×900 window. Library only with public-domain books: 13 Standard Ebooks EPUBs + *The Prince* printed to PDF from its single-page HTML with `google-chrome --headless=new --no-pdf-header-footer --print-to-pdf`. **Never use the user's books** (or other copyrighted covers) in screenshots.

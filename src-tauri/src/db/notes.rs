@@ -91,6 +91,7 @@ mod tests {
                 title: "t",
                 file_path: "p",
                 file_size: 1,
+                content_hash: "h",
             },
         )
         .unwrap();

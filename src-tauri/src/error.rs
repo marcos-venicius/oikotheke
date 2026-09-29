@@ -13,6 +13,11 @@ pub enum AppError {
     Unreadable(String),
     #[error("The book is protected by DRM")]
     Drm,
+    #[error(
+        "\u{201c}{title}\u{201d} is already in your library{}",
+        if *.removed { " (among removed books; restore it from there)" } else { "" }
+    )]
+    Duplicate { title: String, removed: bool },
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
     #[error("Not enough disk space")]
@@ -32,6 +37,7 @@ impl AppError {
             AppError::UnsupportedFormat => "unsupportedFormat",
             AppError::Unreadable(_) => "unreadable",
             AppError::Drm => "drm",
+            AppError::Duplicate { .. } => "duplicate",
             AppError::PermissionDenied(_) => "permissionDenied",
             AppError::DiskFull => "diskFull",
             AppError::Invalid(_) => "invalid",

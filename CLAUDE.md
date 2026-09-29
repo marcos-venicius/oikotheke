@@ -115,13 +115,18 @@ Import flow:
    position and compression are not checked — real files often break that rule).
 2. Generate a unique book id (UUID).
 3. Copy the file to `library/.staging-<id>/book.<pdf|epub>` on a background worker, reporting
-   progress.
-4. Atomically move it into `library/<id>/` and create the book row with status `importing`.
-5. Extract metadata per format — PDF: title, author and page count with pdf.js; EPUB: title,
+   progress and computing its SHA-256 on the way (no extra read).
+4. Refuse duplicates: if a book with the same content is already in the library (under any
+   file name, including soft-removed books), delete the staging copy and report
+   "“Title” is already in your library". Books imported before hashes existed get theirs
+   computed on demand, only when their size matches. A book marked `missing` never counts —
+   importing it again is how its file is recovered.
+5. Atomically move it into `library/<id>/` and create the book row with status `importing`.
+6. Extract metadata per format — PDF: title, author and page count with pdf.js; EPUB: title,
    author and cover image from the package document (OPF), read by the backend (`epub.rs`).
-6. Make a JPEG cover (`cover.jpg`, 480 px wide at most) — PDF: render page 1; EPUB: re-encode
+7. Make a JPEG cover (`cover.jpg`, 480 px wide at most) — PDF: render page 1; EPUB: re-encode
    the declared cover image. A missing cover is never fatal.
-7. Clean the metadata (control characters, whitespace) and mark the book `ready`.
+8. Clean the metadata (control characters, whitespace) and mark the book `ready`.
 
 Damaged books are rolled back with a clear message. EPUBs protected by DRM (`rights.xml`, or
 any `encryption.xml` algorithm other than font obfuscation) are rejected the same way.
@@ -313,6 +318,7 @@ Book
 ├── zoomMode?    PDF view setting
 ├── zoomLevel?   PDF view setting
 ├── fileSize     bytes
+├── contentHash? SHA-256 of the file, backend only (duplicate detection); null until needed
 ├── status       importing | ready | missing
 ├── removedAt?   set when soft-removed
 ├── createdAt
@@ -340,7 +346,7 @@ Key/value pairs: `theme` (light | dark | system), `epub.fontSize` (percent), `ep
 
 Schema changes go through append-only migrations (`src-tauri/src/db/migrations.rs`); never
 edit an existing migration. Migration 3 replaced `books.current_page` and
-`notes.page_number` with locations, losslessly.
+`notes.page_number` with locations, losslessly; migration 4 added `books.content_hash`.
 
 ## Formats
 
