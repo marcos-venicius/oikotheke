@@ -37,7 +37,7 @@ The core principle is **local-first**:
 - Library information, reading progress and notes are stored locally.
 - The application works fully offline.
 
-**Status:** version 1.0.0 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
+**Status:** version 1.1.0 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
 install) and renamed to Oikotheke. PDF and EPUB are fully supported (import, reading,
 progress, notes).
 
@@ -484,7 +484,8 @@ All core features work fully offline.
 ### Cross-platform
 
 Use the framework's filesystem and platform-directory APIs; no hardcoded paths. Linux is the
-primary tested platform (`scripts/install.sh` / `scripts/uninstall.sh`). On Linux the window
+primary tested platform (`scripts/install.sh` / `scripts/uninstall.sh`). Windows is
+distributed as an installer built by CI (see [Versioning and releases](#versioning-and-releases)). On Linux the window
 class (X11 `WM_CLASS`, Wayland `app_id`) must be `oikotheke`, the desktop entry's name, or
 window switchers show no icon; it is set in `setup()` before the main window is created.
 
@@ -520,10 +521,19 @@ new empty `## [Unreleased]`, and update the compare links at the bottom.
 On every push to `main`, `.github/workflows/release.yml`:
 
 1. Fails if the version files disagree or `CHANGELOG.md` has no section for the version.
-2. If the tag `vX.Y.Z` does not exist yet, creates it with a GitHub release whose notes are that
-   changelog section, marked **latest** (pre-releases such as `1.1.0-beta.1` are marked
-   pre-release instead).
-3. Rebuilds and deploys the website with the current version and changelog.
+2. If the tag `vX.Y.Z` does not exist yet, builds the installers (Windows: NSIS,
+   `Oikotheke-windows-x64-setup.exe`, per-user) and runs the backend tests on that platform.
+3. Only when every installer built, creates the tag with a GitHub release whose notes are that
+   changelog section and whose assets are the installers, marked **latest** (pre-releases such
+   as `1.1.0-beta.1` are marked pre-release instead). A failed build releases nothing; fix it
+   and push again.
+4. Rebuilds and deploys the website with the current version and changelog (skipped while a
+   new version's release is missing, so download links never break).
+
+Installer asset names are stable (no version) so the website and README link to
+`releases/latest/download/<name>`; keep the name in the workflow, the website and the README in
+sync. Running the workflow by hand on another branch (`gh workflow run release.yml --ref
+<branch>`) only builds the installers, as a dry run.
 
 ## Scope
 
@@ -541,6 +551,8 @@ On every push to `main`, `.github/workflows/release.yml`:
 - EPUB: import (metadata, cover, DRM/damage checks), reader (pages or scroll, contents, font
   size, theme), progress and resume, notes — with the same flow as PDF.
 - Web links in books open in the browser after confirmation.
+- Versioning (SemVer, changelog), GitHub releases and the website (1.0.0).
+- Windows installer, built and attached to each release by CI (1.1.0).
 
 ### Out of scope (for now)
 

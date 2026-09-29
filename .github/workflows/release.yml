@@ -1,5 +1,9 @@
-# On every push to main: tag and publish a GitHub release when the app version is new, then
-# deploy the website (with that version and the latest changelog entries) to GitHub Pages.
+# On every push to main: when the app version is new, build the installers, then tag and
+# publish a GitHub release with them; always deploy the website (with the current version and
+# the latest changelog entries) to GitHub Pages.
+#
+# Running it by hand (workflow_dispatch) on another branch only builds the installers, as a
+# dry run: nothing is released or deployed outside main.
 name: Release
 
 on:
@@ -8,16 +12,18 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      new: ${{ steps.version.outputs.new }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@v5
 
@@ -30,26 +36,93 @@ jobs:
         id: version
         run: |
           version="$(node scripts/version.mjs)"
-          node scripts/changelog.mjs notes "$version" > "$RUNNER_TEMP/notes.md"
+          node scripts/changelog.mjs notes "$version" > /dev/null
+          new=true
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            new=false
+          fi
+          publish=false
+          if [[ "$new" == true && "$GITHUB_REF" == refs/heads/main ]]; then publish=true; fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "version $version, new: $new, publish: $publish"
 
-      - name: Tag and release a new version
+  windows:
+    needs: version
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # NSIS installer: per-user install, no admin rights; installs WebView2 if missing.
+      - name: Build installer
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Backend tests
+        working-directory: src-tauri
+        run: cargo test
+
+      # A stable name, so the website can link to the latest release's installer.
+      - name: Collect installer
+        shell: bash
+        run: |
+          mkdir -p installers
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe installers/Oikotheke-windows-x64-setup.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: installers/
+          if-no-files-found: error
+
+  release:
+    needs: [version, windows]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: installers
+          merge-multiple: true
+
+      - name: Tag and release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          tag="v$VERSION"
-          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "$tag already exists; nothing to release."
-            exit 0
-          fi
+          node scripts/changelog.mjs notes "$VERSION" > "$RUNNER_TEMP/notes.md"
           # Pre-releases (1.2.0-beta.1) never become "latest".
           if [[ "$VERSION" == *-* ]]; then kind=--prerelease; else kind=--latest; fi
-          gh release create "$tag" --target "$GITHUB_SHA" --title "Oikotheke $tag" \
-            --notes-file "$RUNNER_TEMP/notes.md" "$kind"
+          gh release create "v$VERSION" installers/* --target "$GITHUB_SHA" \
+            --title "Oikotheke v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" "$kind"
 
   website:
-    needs: release
+    needs: [version, release]
+    # Not while a new version's release is missing (its download links would be broken).
+    if: >-
+      always() && github.ref == 'refs/heads/main' && needs.version.result == 'success' &&
+      (needs.release.result == 'success' || needs.version.outputs.new == 'false')
     runs-on: ubuntu-latest
     permissions:
       contents: read

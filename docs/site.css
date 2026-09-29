@@ -357,6 +357,11 @@ pre code {
   padding-top: clamp(4rem, 9vw, 6.5rem);
 }
 
+.install h3 {
+  font-size: 1.3rem;
+  margin: 2rem 0 0.5rem;
+}
+
 .install p {
   color: var(--muted);
 }

@@ -39,6 +39,14 @@ The name comes from Greek *oîkos* (home) + *thḗkē* (case, repository): the h
 - Tailwind CSS v4, [pdf.js](https://mozilla.github.io/pdf.js/),
   [foliate-js](https://github.com/johnfactotum/foliate-js), [zip.js](https://gildas-lormeau.github.io/zip.js/)
 
+## Install on Windows
+
+Download
+[`Oikotheke-windows-x64-setup.exe`](https://github.com/marcos-venicius/oikotheke/releases/latest/download/Oikotheke-windows-x64-setup.exe)
+from the [latest release](https://github.com/marcos-venicius/oikotheke/releases/latest) and run
+it (Windows 10/11, 64-bit; installs for your user, no administrator rights). The installer isn't
+code-signed yet, so SmartScreen may warn: choose *More info* → *Run anyway*.
+
 ## Install on Linux
 
 Requires WebKitGTK 4.1 at runtime (`libwebkit2gtk-4.1-0` on Debian/Ubuntu). Building needs
@@ -89,7 +97,8 @@ PROGRESS.md  Implementation progress and development notes
 ## Releases
 
 Oikotheke follows [Semantic Versioning](https://semver.org); see [CHANGELOG.md](CHANGELOG.md).
-Pushing a new version to `main` tags it and publishes a GitHub release. To bump it:
+Pushing a new version to `main` builds the Windows installer, tags the version and publishes
+a GitHub release with it. To bump it:
 
 ```sh
 node scripts/version.mjs set 1.1.0   # updates package.json, Cargo.toml, tauri.conf.json, locks

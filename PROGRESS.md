@@ -31,6 +31,13 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## Windows installer, 1.1.0 (2026-09-29)
+
+- `release.yml` reworked into `version` → `windows` → `release` → `website`. `version` decides `new` (tag missing) and `publish` (new and on main). `windows` (windows-latest, rust-cache, `npm ci`) runs `tauri build --bundles nsis`, then `cargo test` (after the build so `dist/` exists for `generate_context!`), and uploads `Oikotheke-windows-x64-setup.exe` (stable name, so `releases/latest/download/…` links work). `release` runs only after every installer built and attaches them to `gh release create`. `website` uses `always()` and deploys unless a new version's release is missing.
+- Manual dispatch on a branch = dry run (build only): `gh workflow run release.yml --ref <branch>`; the release job requires `refs/heads/main`.
+- NSIS defaults: per-user install (no admin), WebView2 bootstrapper downloaded if missing. Not code-signed → SmartScreen warning, documented on the site and README.
+- Windows portability checked by reading: stored paths are `/`-joined strings resolved by splitting (`Storage::resolve`), book URLs come from `convertFileSrc` (→ `http://oikotheke.localhost` on Windows, already in the CSP), the only Unix-specific test is `#[cfg(unix)]`, `gdk` is Linux-only. The app has not been run on Windows by hand.
+
 ## Window-switcher icon and website (2026-09-29)
 
 - User report (COSMIC, Wayland): no icon in alt-tab, fine everywhere else. GTK derives the window class (X11 `WM_CLASS` class, Wayland `app_id` when there is no GApplication id) from argv[0] capitalized: `Oikotheke`, which matches no desktop entry (`oikotheke.desktop`). Fix: the main window is `"create": false` in `tauri.conf.json` and is built in `setup()` right after `gdk::set_program_class("oikotheke")` (Linux only, `gdk` 0.18 was already in the tree). It can't be set before `tauri::Builder` runs: gtk-rs `init()` passes argv[0] to `gtk_init_check`, which resets the class.
@@ -45,6 +52,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - `.github/workflows/release.yml` (push to main): `release` job checks version + changelog, creates tag/release `vX.Y.Z --latest` with `gh release create --target $GITHUB_SHA` only if the tag is missing (prerelease versions → `--prerelease`); `website` job builds and deploys Pages. Scripts only use Node built-ins, so CI needs no `npm ci`.
 - Repo made public for 1.0.0 (Pages is not available on private repos on the current plan); Pages source = GitHub Actions (enabled via `gh api -X POST repos/…/pages -f build_type=workflow`). Jobs that set `permissions:` must include `contents: read` or `actions/checkout` fails with "repository not found". The workflow does not run tests or build binaries yet.
 - Verified locally: version check/set, failure on mismatched files, invalid SemVer and missing changelog section; site render. The workflow itself only runs on GitHub.
+- Gotcha: the project folder was renamed from `pdf-bookshelf`, and `target/` kept build-script outputs with the old absolute path. Any rebuild of the app crate (e.g. the version bump) then fails with "failed to read plugin permissions: …/pdf-bookshelf/…/app_hide.toml". Fix: `cargo clean [--release] -p tauri -p tauri-plugin-dialog -p tauri-plugin-fs -p tauri-plugin-log -p tauri-plugin-opener -p libsqlite3-sys -p oikotheke` (or a full `cargo clean`); check with `grep -rlI pdf-bookshelf src-tauri/target/*/build/*/output`. Fresh clones are not affected.
 
 ## Shelf order by activity (2026-09-29)
 

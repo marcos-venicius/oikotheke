@@ -6,6 +6,12 @@ All notable changes to Oikotheke are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-29
+
+### Added
+
+- Windows installer (64-bit), attached to every release and linked from the website.
+
 ## [1.0.0] - 2026-09-29
 
 The first release: a local-first library and reader for PDF and EPUB books.
@@ -33,5 +39,6 @@ The first release: a local-first library and reader for PDF and EPUB books.
 
 - The app icon now shows in window switchers (alt-tab) on Linux.
 
-[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/marcos-venicius/oikotheke/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/marcos-venicius/oikotheke/releases/tag/v1.0.0

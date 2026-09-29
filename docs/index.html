@@ -45,8 +45,12 @@
           files, reading progress and notes never leave your machine.
         </p>
         <div class="cta">
-          <a class="btn btn-primary" href="#install">Install on Linux</a>
-          <a class="btn" href="https://github.com/marcos-venicius/oikotheke">View the source</a>
+          <a
+            class="btn btn-primary"
+            href="https://github.com/marcos-venicius/oikotheke/releases/latest/download/Oikotheke-windows-x64-setup.exe"
+            >Download for Windows</a
+          >
+          <a class="btn" href="#linux">Install on Linux</a>
         </div>
         <ul class="pills" aria-label="Principles">
           <li>No account</li>
@@ -175,7 +179,22 @@
       </section>
 
       <section id="install" class="install wrap">
-        <h2>Install on Linux</h2>
+        <h2>Install</h2>
+        <h3>Windows</h3>
+        <p>
+          <a
+            class="btn btn-primary"
+            href="https://github.com/marcos-venicius/oikotheke/releases/latest/download/Oikotheke-windows-x64-setup.exe"
+            >Download the installer</a
+          >
+        </p>
+        <p>
+          For Windows 10 and 11 (64-bit). It installs for your user, without administrator rights,
+          and adds Oikotheke to the Start menu. The installer isn't code-signed yet, so Windows may
+          say it "protected your PC": choose <em>More info</em> → <em>Run anyway</em>. Every release
+          is on <a href="https://github.com/marcos-venicius/oikotheke/releases">GitHub</a>.
+        </p>
+        <h3 id="linux">Linux</h3>
         <p>
           Oikotheke is built from source. You need WebKitGTK 4.1 at runtime (<code
             >libwebkit2gtk-4.1-0</code
