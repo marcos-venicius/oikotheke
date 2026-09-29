@@ -566,8 +566,8 @@ tracked in `PROGRESS.md`.
   `cd src-tauri && cargo test`.
 - Everything (code, UI text, commits, docs) is written in English.
 - Versioning: SemVer with a changelog, see [Versioning and releases](#versioning-and-releases).
-- Commits: Conventional Commits. The repository is `marcos-venicius/oikotheke` (private,
-  GitHub); **push only when the user asks**. **Never add `Co-Authored-By` or any AI
+- Commits: Conventional Commits. The repository is `marcos-venicius/oikotheke` (public,
+  GitHub; website at <https://marcos-venicius.github.io/oikotheke/>); **push only when the user asks**. **Never add `Co-Authored-By` or any AI
   attribution** to commits or PRs.
 - License: MIT (`LICENSE`). New dependencies must have a compatible license.
 - Never use the user's own PDFs for testing; generate test files.
