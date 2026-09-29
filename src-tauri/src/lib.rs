@@ -42,6 +42,15 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, protocol::handle)
         .setup(move |app| {
             migration.log();
+            // GTK derives the window class (X11 WM_CLASS, Wayland app_id) from argv[0] as
+            // "Oikotheke", which matches no desktop entry, so window switchers show no icon.
+            // It can only be changed after GTK starts, so the window is created here, not
+            // from the config ("create": false).
+            #[cfg(target_os = "linux")]
+            gdk::set_program_class("oikotheke");
+            for window in app.config().app.windows.clone() {
+                tauri::WebviewWindowBuilder::from_config(app.handle(), &window)?.build()?;
+            }
             let data_dir = app.path().app_data_dir()?;
             let storage = Storage::new(&data_dir)?;
             let db = Database::open(&data_dir.join(DATABASE_FILE))?;

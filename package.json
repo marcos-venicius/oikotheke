@@ -2,7 +2,7 @@
   "name": "oikotheke",
   "private": true,
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc -b",
+    "app-version": "node scripts/version.mjs",
+    "site": "node scripts/build-site.mjs",
     "predev": "node scripts/copy-pdfjs-assets.mjs",
     "prebuild": "node scripts/copy-pdfjs-assets.mjs"
   },

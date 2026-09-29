@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oikotheke — your home bookshelf</title>
+    <meta
+      name="description"
+      content="A local-first desktop app to organize, read and annotate your PDF and EPUB books. No account, no cloud, no telemetry."
+    />
+    <meta property="og:title" content="Oikotheke — your home bookshelf" />
+    <meta
+      property="og:description"
+      content="Organize, read and annotate your PDF and EPUB books. Everything stays on your machine."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="screenshots/library.png" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="#top">
+          <img src="icon.svg" alt="" width="28" height="28" />
+          Oikotheke
+        </a>
+        <nav>
+          <a href="#features">Features</a>
+          <a href="#install">Install</a>
+          <a href="#changelog">Changelog</a>
+          <a class="nav-gh" href="https://github.com/marcos-venicius/oikotheke">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero wrap">
+        <img class="hero-icon" src="icon.svg" alt="" width="96" height="96" />
+        <a class="version" href="#changelog">Version {{VERSION}}</a>
+        <h1>Your books, on your own shelf.</h1>
+        <p class="lead">
+          Oikotheke is a desktop app to organize, read and annotate your PDF and EPUB books. Your
+          files, reading progress and notes never leave your machine.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#install">Install on Linux</a>
+          <a class="btn" href="https://github.com/marcos-venicius/oikotheke">View the source</a>
+        </div>
+        <ul class="pills" aria-label="Principles">
+          <li>No account</li>
+          <li>No cloud</li>
+          <li>No telemetry</li>
+          <li>Works offline</li>
+          <li>Open source (MIT)</li>
+        </ul>
+      </section>
+
+      <figure class="shot shot-hero wrap">
+        <img
+          src="screenshots/library.png"
+          alt="The library: a shelf of book covers with reading-progress bars"
+          width="1440"
+          height="760"
+        />
+      </figure>
+
+      <section id="features" class="features wrap">
+        <h2>A reading room, not a file browser</h2>
+        <div class="grid">
+          <article>
+            <h3>A shelf, not a file list</h3>
+            <p>
+              Import books with the file picker or drag and drop. Each one gets its cover, title,
+              author and a progress bar — and the books you touched last come first.
+            </p>
+          </article>
+          <article>
+            <h3>Your own copy</h3>
+            <p>
+              Every book is copied into the app's storage, so moving or deleting the original never
+              breaks your library. The same book is never imported twice.
+            </p>
+          </article>
+          <article>
+            <h3>Comfortable reading</h3>
+            <p>
+              PDFs page by page with zoom and fit modes. EPUBs as book-like pages or a continuous
+              scroll, with contents, font size and light or dark themes. Focus mode hides the rest.
+            </p>
+          </article>
+          <article>
+            <h3>Picks up where you left off</h3>
+            <p>
+              Your position is saved as you read, with no save button, and restored when you open
+              the book again — even after restarting the app.
+            </p>
+          </article>
+          <article>
+            <h3>Notes on any page</h3>
+            <p>
+              Write notes while reading, see which pages have them, jump between them, and review
+              them all on the book's page.
+            </p>
+          </article>
+          <article>
+            <h3>Safe with untrusted books</h3>
+            <p>
+              EPUB content can't run scripts or reach the network, and web links open in your
+              browser only after you confirm where they go.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="gallery wrap" aria-label="Screenshots">
+        <figure class="shot">
+          <img
+            src="screenshots/reader-notes.png"
+            alt="Reading an EPUB with a note beside the text"
+            width="1440"
+            height="881"
+            loading="lazy"
+          />
+          <figcaption>Notes next to the text, marked on the page.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img
+            src="screenshots/reader-dark.png"
+            alt="Reading an EPUB in dark mode, two pages side by side"
+            width="1440"
+            height="881"
+            loading="lazy"
+          />
+          <figcaption>Dark mode, two-page layout.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img
+            src="screenshots/book-details.png"
+            alt="A book's page with its progress and notes"
+            width="1440"
+            height="660"
+            loading="lazy"
+          />
+          <figcaption>Every note of a book, in reading order.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img
+            src="screenshots/reader-pdf.png"
+            alt="Reading a PDF"
+            width="1440"
+            height="881"
+            loading="lazy"
+          />
+          <figcaption>PDF reader with zoom and fit modes.</figcaption>
+        </figure>
+      </section>
+
+      <section class="local wrap">
+        <div>
+          <h2>Local-first, for real</h2>
+          <p>
+            There is no server to send anything to. Books, covers, progress and notes live in a
+            folder and a SQLite database on your computer, and the app works fully offline. If a
+            sync feature ever comes, it will be optional.
+          </p>
+        </div>
+        <pre class="tree"><code>~/.local/share/io.github.marcos-venicius.oikotheke/
+├── library/
+│   └── &lt;book-id&gt;/
+│       ├── book.epub
+│       └── cover.jpg
+└── oikotheke.db</code></pre>
+      </section>
+
+      <section id="install" class="install wrap">
+        <h2>Install on Linux</h2>
+        <p>
+          Oikotheke is built from source. You need WebKitGTK 4.1 at runtime (<code
+            >libwebkit2gtk-4.1-0</code
+          >
+          on Debian and Ubuntu), plus Node 20+ and stable Rust to build.
+        </p>
+        <pre><code>git clone https://github.com/marcos-venicius/oikotheke.git
+cd oikotheke
+scripts/install.sh            # installs for your user, in ~/.local</code></pre>
+        <p>
+          It then shows up in your applications menu.
+          <code>scripts/install.sh --system</code> installs for all users;
+          <code>scripts/uninstall.sh</code> removes the app and keeps your library.
+        </p>
+      </section>
+
+      <section id="changelog" class="changelog wrap">
+        <h2>What's new</h2>
+        <!-- CHANGELOG -->
+        <p class="changelog-all">
+          <a href="https://github.com/marcos-venicius/oikotheke/blob/main/CHANGELOG.md"
+            >Full changelog</a
+          >
+        </p>
+      </section>
+
+      <section class="name wrap">
+        <p class="greek" lang="grc">οἶκος + θήκη</p>
+        <p>
+          <em>Oîkos</em>, "home", and <em>thḗkē</em>, "case" — the same <em>thḗkē</em> as in
+          <em>bibliothḗkē</em>, library. Oikotheke is the home shelf: a personal library that lives
+          with you.
+        </p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <p>
+          <a href="https://github.com/marcos-venicius/oikotheke">Oikotheke</a> is open source under
+          the MIT license · © 2026 Marcos Sousa
+        </p>
+        <p class="muted">
+          Sample books in the screenshots are public-domain editions from
+          <a href="https://standardebooks.org">Standard Ebooks</a>.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,78 @@
+# On every push to main: tag and publish a GitHub release when the app version is new, then
+# deploy the website (with that version and the latest changelog entries) to GitHub Pages.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      # Fails when the version files disagree or CHANGELOG.md has no entry for the version.
+      - name: Read version
+        id: version
+        run: |
+          version="$(node scripts/version.mjs)"
+          node scripts/changelog.mjs notes "$version" > "$RUNNER_TEMP/notes.md"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Tag and release a new version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; nothing to release."
+            exit 0
+          fi
+          # Pre-releases (1.2.0-beta.1) never become "latest".
+          if [[ "$VERSION" == *-* ]]; then kind=--prerelease; else kind=--latest; fi
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Oikotheke $tag" \
+            --notes-file "$RUNNER_TEMP/notes.md" "$kind"
+
+  website:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Build website
+        run: node scripts/build-site.mjs site-dist
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site-dist
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

@@ -27,3 +27,6 @@ dist-ssr
 
 # Generated from pdfjs-dist
 public/pdfjs
+
+# Website build (scripts/build-site.mjs)
+site-dist

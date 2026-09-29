@@ -81,8 +81,18 @@ ui/          React frontend (features, services, styles)
 src-tauri/   Rust backend (db, storage, services, commands)
 scripts/     Linux install/uninstall, pdf.js asset copy
 assets/      App icon source (app-icon.svg)
-docs/        README screenshots
+docs/        Website (GitHub Pages) and screenshots
+CHANGELOG.md Release notes
 PROGRESS.md  Implementation progress and development notes
+```
+
+## Releases
+
+Oikotheke follows [Semantic Versioning](https://semver.org); see [CHANGELOG.md](CHANGELOG.md).
+Pushing a new version to `main` tags it and publishes a GitHub release. To bump it:
+
+```sh
+node scripts/version.mjs set 1.1.0   # updates package.json, Cargo.toml, tauri.conf.json, locks
 ```
 
 ## License

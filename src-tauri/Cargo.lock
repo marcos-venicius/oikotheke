@@ -2428,9 +2428,10 @@ dependencies = [
 
 [[package]]
 name = "oikotheke"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "dirs",
+ "gdk",
  "log",
  "quick-xml",
  "rusqlite",

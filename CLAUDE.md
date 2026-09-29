@@ -37,7 +37,7 @@ The core principle is **local-first**:
 - Library information, reading progress and notes are stored locally.
 - The application works fully offline.
 
-**Status:** v1 is complete (library, reader, progress, notes, book details, hardening, Linux
+**Status:** version 1.0.0 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
 install) and renamed to Oikotheke. PDF and EPUB are fully supported (import, reading,
 progress, notes).
 
@@ -484,7 +484,46 @@ All core features work fully offline.
 ### Cross-platform
 
 Use the framework's filesystem and platform-directory APIs; no hardcoded paths. Linux is the
-primary tested platform (`scripts/install.sh` / `scripts/uninstall.sh`).
+primary tested platform (`scripts/install.sh` / `scripts/uninstall.sh`). On Linux the window
+class (X11 `WM_CLASS`, Wayland `app_id`) must be `oikotheke`, the desktop entry's name, or
+window switchers show no icon; it is set in `setup()` before the main window is created.
+
+## Website
+
+A static landing page lives in `docs/` (`index.html`, `site.css`), reusing `docs/screenshots`.
+`scripts/build-site.mjs` (`npm run site`) builds it into `site-dist/`, filling in
+`{{VERSION}}` and the latest `CHANGELOG.md` releases (`<!-- CHANGELOG -->`); the release
+workflow deploys it to GitHub Pages (source: GitHub Actions). Like the app, it makes no
+external requests (no web fonts, analytics or CDNs). Keep its features and install steps in
+line with the README.
+
+## Versioning and releases
+
+The app follows [Semantic Versioning](https://semver.org). **Every change that reaches `main`
+must decide whether it bumps the version, and bump it in the same change:**
+
+- **MAJOR** (`2.0.0`) — incompatible changes: data or library layout that older versions can't
+  read, removed features, changed install paths.
+- **MINOR** (`1.1.0`) — new user-facing features, backwards compatible (e.g. a new format).
+- **PATCH** (`1.0.1`) — bug fixes and small, compatible improvements.
+- No bump — changes users don't get: docs, tests, CI, refactors without behavior change.
+
+The version lives in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`,
+`src-tauri/Cargo.lock` and `src-tauri/tauri.conf.json`. Never edit it by hand: run
+`node scripts/version.mjs set X.Y.Z` (`node scripts/version.mjs` checks that all agree).
+
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com): every user-visible
+change adds a line under `## [Unreleased]` (Added, Changed, Fixed, Removed, Security), written
+for users, not developers. On a bump, rename that section to `## [X.Y.Z] - YYYY-MM-DD`, start a
+new empty `## [Unreleased]`, and update the compare links at the bottom.
+
+On every push to `main`, `.github/workflows/release.yml`:
+
+1. Fails if the version files disagree or `CHANGELOG.md` has no section for the version.
+2. If the tag `vX.Y.Z` does not exist yet, creates it with a GitHub release whose notes are that
+   changelog section, marked **latest** (pre-releases such as `1.1.0-beta.1` are marked
+   pre-release instead).
+3. Rebuilds and deploys the website with the current version and changelog.
 
 ## Scope
 
@@ -526,6 +565,7 @@ tracked in `PROGRESS.md`.
 - Commands: `npm run tauri dev`, `npm test`, `npm run lint`, `npm run typecheck`,
   `cd src-tauri && cargo test`.
 - Everything (code, UI text, commits, docs) is written in English.
+- Versioning: SemVer with a changelog, see [Versioning and releases](#versioning-and-releases).
 - Commits: Conventional Commits. The repository is `marcos-venicius/oikotheke` (private,
   GitHub); **push only when the user asks**. **Never add `Co-Authored-By` or any AI
   attribution** to commits or PRs.
@@ -551,6 +591,7 @@ When adding a feature, check its impact on:
 - Reader performance.
 - Cross-platform compatibility.
 - Data privacy.
+- The version and `CHANGELOG.md`.
 - **This file** — update it if the feature changes anything described here.
 
 ## Main success criterion

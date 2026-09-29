@@ -31,6 +31,21 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## Window-switcher icon and website (2026-09-29)
+
+- User report (COSMIC, Wayland): no icon in alt-tab, fine everywhere else. GTK derives the window class (X11 `WM_CLASS` class, Wayland `app_id` when there is no GApplication id) from argv[0] capitalized: `Oikotheke`, which matches no desktop entry (`oikotheke.desktop`). Fix: the main window is `"create": false` in `tauri.conf.json` and is built in `setup()` right after `gdk::set_program_class("oikotheke")` (Linux only, `gdk` 0.18 was already in the tree). It can't be set before `tauri::Builder` runs: gtk-rs `init()` passes argv[0] to `gtk_init_check`, which resets the class.
+- Not used: `app.enableGTKAppId` (app_id = identifier) — it registers a GApplication, and a second launch would re-send `activate`, i.e. `StartCause::Init` → Tauri runs `setup` again.
+- Verified: debug build on XWayland (`GDK_BACKEND=x11`, scratch `XDG_DATA_HOME`), `xwininfo -root -tree` shows the main window as `("oikotheke" "oikotheke")` (was `"Oikotheke"`). Wayland alt-tab itself needs a reinstall to check.
+- Website: static page in `docs/` (`index.html`, `site.css`, `icon.svg` = copy of `assets/app-icon.svg`, `.nojekyll`), reusing `docs/screenshots`. No external requests (system fonts), light/dark by `prefers-color-scheme`, tokens copied from `ui/styles/index.css`. Previewed with `google-chrome --headless --screenshot` at 1280 and 390 px (render `npm run site` output, not raw `docs/`, which has placeholders).
+
+## Versioning 1.0.0 (2026-09-29)
+
+- Version 1.0.0 everywhere (was 0.1.0). `scripts/version.mjs` reads/sets the version in the 5 files (regex edits keep formatting; the `package-lock.json` root package entry too). `CHANGELOG.md` (Keep a Changelog); `scripts/changelog.mjs` parses it (`notes X.Y.Z` prints a release body, used for GitHub release notes).
+- `scripts/build-site.mjs` copies `docs/` to `site-dist/` (gitignored) and fills `{{VERSION}}` + `<!-- CHANGELOG -->` (last 3 releases; tiny markdown renderer for the changelog's subset: `###`, paragraphs, `-` lists with indented continuation, code/bold/italic/links, all escaped). Fails if the newest release isn't the current version.
+- `.github/workflows/release.yml` (push to main): `release` job checks version + changelog, creates tag/release `vX.Y.Z --latest` with `gh release create --target $GITHUB_SHA` only if the tag is missing (prerelease versions → `--prerelease`); `website` job builds and deploys Pages. Scripts only use Node built-ins, so CI needs no `npm ci`.
+- Setup needed once on GitHub: Settings → Pages → Source "GitHub Actions" (private repos need a paid plan for Pages). The workflow does not run tests or build binaries yet.
+- Verified locally: version check/set, failure on mismatched files, invalid SemVer and missing changelog section; site render. The workflow itself only runs on GitHub.
+
 ## Shelf order by activity (2026-09-29)
 
 - User request: order the shelf by what was read most recently. `books::list_active` now orders by `updated_at DESC, created_at DESC`. `updated_at` already moved on open (the readers save progress on mount), reading, import, restore; notes now also bump it via `books::touch` in `services/notes` (create/update/delete; delete stays idempotent for unknown ids). The shelf re-fetches on every mount, so returning from the reader shows the new order.
