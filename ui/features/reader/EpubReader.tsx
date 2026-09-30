@@ -20,7 +20,7 @@ import { EpubToolbar } from "./EpubToolbar";
 import { FractionScrubber } from "./FractionScrubber";
 import { NotesPanel, type NotesJump } from "./NotesPanel";
 import { OpenLinkDialog } from "./OpenLinkDialog";
-import { ignoresShortcuts, useChromeVisibility } from "./readerChrome";
+import { ctrlWheelZoom, ignoresShortcuts, useChromeVisibility } from "./readerChrome";
 import { ReaderError, ReaderLoading } from "./ReaderStatus";
 import { TocPanel } from "./TocPanel";
 import { useBookNotes } from "./useBookNotes";
@@ -100,8 +100,10 @@ export function EpubReader({ book }: { book: Book }) {
   });
 
   const onKey = useCallback((e: KeyboardEvent) => {
-    if (ignoresShortcuts(e.target) || e.altKey || e.metaKey || e.ctrlKey) return;
+    if (ignoresShortcuts(e.target) || e.altKey || e.metaKey) return;
     const h = handlers.current;
+    // Ctrl only combines with the font size keys (Ctrl +/-, like zooming a page).
+    if (e.ctrlKey && !["+", "=", "-"].includes(e.key)) return;
     switch (e.key) {
       case "ArrowRight":
       case "PageDown":
@@ -140,10 +142,24 @@ export function EpubReader({ book }: { book: Book }) {
     e.preventDefault();
   }, []);
 
+  // Ctrl + wheel changes the font size, in the app chrome and inside the book's iframes.
+  const [wheelZoom] = useState(ctrlWheelZoom);
+  const onWheel = useCallback(
+    (e: WheelEvent) => {
+      const dir = wheelZoom(e);
+      if (dir) handlers.current.changeFontSize(dir);
+    },
+    [wheelZoom],
+  );
+
   useEffect(() => {
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onKey]);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("wheel", onWheel);
+    };
+  }, [onKey, onWheel]);
 
   // Open the book once, after the preferences are known so the first layout is final.
   useEffect(() => {
@@ -167,6 +183,7 @@ export function EpubReader({ book }: { book: Book }) {
         el.addEventListener("load", (e) => {
           const { doc } = (e as CustomEvent<{ doc: Document }>).detail;
           doc.addEventListener("keydown", onKey);
+          doc.addEventListener("wheel", onWheel, { passive: false });
           doc.addEventListener("pointermove", () => handlers.current.poke());
         });
         // Links to websites open in the system browser, and only after the user confirms.
@@ -192,7 +209,7 @@ export function EpubReader({ book }: { book: Book }) {
       opened?.close();
       opened?.remove();
     };
-  }, [book, prefsLoaded, onKey, startAt]);
+  }, [book, prefsLoaded, onKey, onWheel, startAt]);
 
   // Styles and layout follow the preferences and the app theme. The theme's colors are read a
   // frame later: ThemeProvider applies them in its own effect, which runs after this one.

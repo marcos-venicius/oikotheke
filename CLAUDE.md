@@ -37,7 +37,7 @@ The core principle is **local-first**:
 - Library information, reading progress and notes are stored locally.
 - The application works fully offline.
 
-**Status:** version 1.1.0 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
+**Status:** version 1.1.1 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
 install) and renamed to Oikotheke. PDF and EPUB are fully supported (import, reading,
 progress, notes).
 
@@ -208,7 +208,8 @@ The PDF reader:
 - Navigates forward/back (buttons, keyboard, page scrubber).
 - Jumps directly to a page.
 - Shows the current page and total page count.
-- Supports zoom and fit modes: fit page, fit width, fit height, custom zoom.
+- Supports zoom and fit modes: fit page, fit width, fit height, custom zoom. Zoom in/out also
+  with +/− (with or without Ctrl) and Ctrl + mouse wheel.
 - Has a focus mode (full screen, minimal chrome).
 - Returns to the library/book page.
 
@@ -224,7 +225,7 @@ EPUBs reflow, so there are no fixed pages. The EPUB reader uses
   scroll per chapter.
 - Navigates forward/back (buttons, keyboard), through the table of contents, or by dragging the
   percentage bar, which also shows the current chapter.
-- Changes the font size (80–200%).
+- Changes the font size (80–200%), also with +/− (with or without Ctrl) and Ctrl + mouse wheel.
 - Follows the app theme: pages take the app background; dark mode forces readable text.
 - Has the same focus mode and returns to the library.
 

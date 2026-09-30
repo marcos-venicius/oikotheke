@@ -5,7 +5,7 @@ import { pdfLocation, pdfPage, pdfProgress } from "@/lib/location";
 import { groupNotes } from "@/lib/notes";
 import { adjacentNotedPage, notedPages } from "./notedPages";
 import { NotesPanel } from "./NotesPanel";
-import { ignoresShortcuts, useChromeVisibility } from "./readerChrome";
+import { ctrlWheelZoom, ignoresShortcuts, useChromeVisibility } from "./readerChrome";
 import { ReaderError, ReaderLoading } from "./ReaderStatus";
 import { PageScrubber } from "./PageScrubber";
 import { PageView } from "./PageView";
@@ -141,8 +141,17 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
       }
       e.preventDefault();
     };
+    const wheelZoom = ctrlWheelZoom();
+    const onWheel = (e: WheelEvent) => {
+      const dir = wheelZoom(e);
+      if (dir) handlers.current.zoom(dir);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("wheel", onWheel);
+    };
   }, []);
 
   return (

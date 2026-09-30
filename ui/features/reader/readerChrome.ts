@@ -40,3 +40,25 @@ export function useChromeVisibility() {
 
   return { visible, poke };
 }
+
+/** Wheel distance (pixels) that makes one zoom step; touchpads send many small deltas. */
+const WHEEL_ZOOM_THRESHOLD = 50;
+const LINE_HEIGHT = 40;
+
+/**
+ * Tracks Ctrl + wheel for zooming: returns 1 (zoom in, wheel up), -1 (zoom out) or 0, at most one
+ * step per event. Listen with `{ passive: false }` so the webview's own zoom is cancelled.
+ */
+export function ctrlWheelZoom() {
+  let delta = 0;
+  return (e: WheelEvent): 1 | -1 | 0 => {
+    if (!e.ctrlKey || e.deltaY === 0) return 0;
+    e.preventDefault();
+    const step = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? e.deltaY : e.deltaY * LINE_HEIGHT;
+    // Start over when the direction changes.
+    delta = Math.sign(step) === Math.sign(delta) ? delta + step : step;
+    if (Math.abs(delta) < WHEEL_ZOOM_THRESHOLD) return 0;
+    delta = 0;
+    return step < 0 ? 1 : -1;
+  };
+}

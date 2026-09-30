@@ -85,6 +85,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 - User request: clicking a web link in a book asks for confirmation, then opens it in the system browser. `tauri-plugin-opener` 2.6 (official; pulls zbus/zvariant on Linux, ~580 Cargo.lock lines) with a capability scoped to `http://*`/`https://*` only (not `opener:default`, which adds mailto/tel/reveal). `services/linkService.ts` (`webUrl`, `openInBrowser`), `reader/OpenLinkDialog.tsx` (host + full URL, focus starts on Cancel). Non-web schemes get a toast.
 - Reader shortcuts are ignored while a `<dialog open>` exists (`ignoresShortcuts`), so Esc closes the dialog without leaving the book.
+- Ctrl + wheel zooms (PDF) / changes the font size (EPUB) via `ctrlWheelZoom` (readerChrome.ts): non-passive `wheel` listeners on the window and, for EPUB, inside each iframe; deltas accumulate to 50 px so touchpads step once per ~notch, and `preventDefault` stops any webview zoom. Ctrl +/− reuse the +/− shortcuts (EPUB ignores other Ctrl combos).
 - Verified with fake `xdg-open`/`gio` scripts first on `PATH` (they log the URL instead of launching the user's browser): Esc → nothing opened; Open link → exactly one `xdg-open http://127.0.0.1:8765/clicked-link`.
 
 ## EPUB phase 3: reader (2026-09-28)

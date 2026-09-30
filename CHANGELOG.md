@@ -6,6 +6,12 @@ All notable changes to Oikotheke are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-30
+
+### Changed
+
+- Ctrl + mouse wheel and Ctrl +/− zoom PDFs and change the font size of EPUBs.
+
 ## [1.1.0] - 2026-09-29
 
 ### Added
@@ -39,6 +45,7 @@ The first release: a local-first library and reader for PDF and EPUB books.
 
 - The app icon now shows in window switchers (alt-tab) on Linux.
 
-[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/marcos-venicius/oikotheke/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/marcos-venicius/oikotheke/releases/tag/v1.0.0
