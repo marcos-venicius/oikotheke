@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::State;
 
+use crate::catalog::{self, CatalogEntry};
 use crate::db::books;
 use crate::error::{AppError, AppResult};
 use crate::import::ImportJob;
@@ -29,6 +30,20 @@ pub fn get_book(state: State<AppState>, id: String) -> AppResult<Book> {
 #[tauri::command]
 pub fn import_books(state: State<AppState>, paths: Vec<PathBuf>) -> Vec<ImportJob> {
     state.imports.enqueue(paths)
+}
+
+/// The Discover catalog, bundled with the app.
+#[tauri::command]
+pub fn list_catalog() -> Vec<CatalogEntry> {
+    catalog::entries().to_vec()
+}
+
+/// Queues the download and import of a Discover book and returns immediately.
+#[tauri::command]
+pub fn import_from_catalog(state: State<AppState>, id: String) -> AppResult<ImportJob> {
+    let entry = catalog::get(&id)?;
+    library::ensure_not_downloaded(&state.db, &entry.id)?;
+    Ok(state.imports.enqueue_catalog(entry))
 }
 
 #[tauri::command]

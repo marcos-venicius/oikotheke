@@ -8,7 +8,7 @@ macro_rules! book_columns {
     () => {
         "b.id, b.format, b.title, b.author, b.file_path, b.cover_path, b.page_count,
          b.location, b.progress, b.zoom_level, b.zoom_mode, b.file_size, b.status, b.removed_at,
-         b.created_at, b.updated_at,
+         b.created_at, b.updated_at, b.catalog_id,
          (SELECT COUNT(*) FROM notes n WHERE n.book_id = b.id) AS note_count"
     };
 }
@@ -33,7 +33,8 @@ fn from_row(row: &Row) -> rusqlite::Result<Book> {
         removed_at: row.get(13)?,
         created_at: row.get(14)?,
         updated_at: row.get(15)?,
-        note_count: row.get(16)?,
+        catalog_id: row.get(16)?,
+        note_count: row.get(17)?,
     })
 }
 
@@ -44,14 +45,16 @@ pub struct NewBook<'a> {
     pub file_path: &'a str,
     pub file_size: i64,
     pub content_hash: &'a str,
+    /// Set when the book was downloaded from the Discover catalog.
+    pub catalog_id: Option<&'a str>,
 }
 
 pub fn insert_importing(conn: &Connection, book: &NewBook) -> AppResult<()> {
     let now = now_ms();
     conn.execute(
-        "INSERT INTO books (id, format, title, file_path, file_size, content_hash, status,
-                            created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'importing', ?7, ?7)",
+        "INSERT INTO books (id, format, title, file_path, file_size, content_hash, catalog_id,
+                            status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'importing', ?8, ?8)",
         params![
             book.id,
             book.format.as_str(),
@@ -59,6 +62,7 @@ pub fn insert_importing(conn: &Connection, book: &NewBook) -> AppResult<()> {
             book.file_path,
             book.file_size,
             book.content_hash,
+            book.catalog_id,
             now
         ],
     )?;
@@ -84,14 +88,32 @@ pub fn list_removed(conn: &Connection) -> AppResult<Vec<Book>> {
     list_where(conn, "b.removed_at IS NOT NULL ORDER BY b.removed_at DESC")
 }
 
+/// A book downloaded from this catalog entry whose file is still there, if any.
+pub fn find_by_catalog_id(conn: &Connection, catalog_id: &str) -> AppResult<Option<Book>> {
+    Ok(list_where_with(
+        conn,
+        "b.catalog_id = ?1 AND b.status != 'missing' ORDER BY b.created_at LIMIT 1",
+        [catalog_id],
+    )?
+    .pop())
+}
+
 pub fn list_all(conn: &Connection) -> AppResult<Vec<Book>> {
     list_where(conn, "1 = 1")
 }
 
 fn list_where(conn: &Connection, clause: &str) -> AppResult<Vec<Book>> {
+    list_where_with(conn, clause, [])
+}
+
+fn list_where_with(
+    conn: &Connection,
+    clause: &str,
+    params: impl rusqlite::Params,
+) -> AppResult<Vec<Book>> {
     let mut stmt = conn.prepare(&format!("{SELECT} WHERE {clause}"))?;
     let books = stmt
-        .query_map([], from_row)?
+        .query_map(params, from_row)?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(books)
 }
@@ -171,7 +193,7 @@ pub fn same_size(conn: &Connection, size: i64) -> AppResult<Vec<Candidate>> {
         .query_map([size], |row| {
             Ok(Candidate {
                 book: from_row(row)?,
-                content_hash: row.get(17)?,
+                content_hash: row.get(18)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -222,6 +244,7 @@ mod tests {
                 file_path: "library/x/book.pdf",
                 file_size: 10,
                 content_hash: id,
+                catalog_id: None,
             },
         )
         .unwrap();

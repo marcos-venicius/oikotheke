@@ -43,7 +43,11 @@ export function ImportCard({ job }: { job: ImportJobState }) {
           </svg>
         )}
         <p className="text-center text-xs text-muted">
-          {failed ? job.error : stageLabel[job.stage]}
+          {failed
+            ? job.error
+            : job.catalogId && job.stage === "copying"
+              ? "Downloading…"
+              : stageLabel[job.stage]}
         </p>
       </div>
       <p

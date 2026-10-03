@@ -88,6 +88,8 @@ pub struct Book {
     pub removed_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// The Discover catalog entry the book was downloaded from, if any.
+    pub catalog_id: Option<String>,
     pub note_count: i64,
 }
 

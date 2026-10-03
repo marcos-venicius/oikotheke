@@ -27,7 +27,20 @@ export function BookCover({ book, className }: { book: Book; className?: string 
       />
     );
   }
-  const h = hue(book.title);
+  return <PlaceholderCover title={book.title} author={book.author} className={className} />;
+}
+
+/** Typographic cover for books without an image (and for Discover, which loads none). */
+export function PlaceholderCover({
+  title,
+  author,
+  className,
+}: {
+  title: string;
+  author: string | null;
+  className?: string;
+}) {
+  const h = hue(title);
   return (
     <div
       className={cn("flex size-full flex-col justify-between p-3.5 text-left", className)}
@@ -36,9 +49,9 @@ export function BookCover({ book, className }: { book: Book; className?: string 
       }}
     >
       <span className="line-clamp-5 text-[13px] leading-snug font-semibold text-white/95">
-        {book.title}
+        {title}
       </span>
-      {book.author && <span className="line-clamp-2 text-[11px] text-white/70">{book.author}</span>}
+      {author && <span className="line-clamp-2 text-[11px] text-white/70">{author}</span>}
     </div>
   );
 }

@@ -24,6 +24,8 @@ export interface Book {
   removedAt: number | null;
   createdAt: number;
   updatedAt: number;
+  /** The Discover catalog entry the book was downloaded from; null for the user's own files. */
+  catalogId: string | null;
   noteCount: number;
 }
 
@@ -53,7 +55,26 @@ export interface EpubMetadata {
 export interface ImportJob {
   jobId: string;
   fileName: string;
+  /** 0 when unknown (a download whose size is not known yet). */
   totalBytes: number;
+  /** Set when the job downloads a Discover book. */
+  catalogId: string | null;
+}
+
+/** A freely licensed book listed in Discover, bundled with the app. */
+export interface CatalogEntry {
+  id: string;
+  title: string;
+  author: string;
+  year: number;
+  /** ISO 639-1 code. */
+  language: string;
+  category: "classic" | "technical";
+  format: BookFormat;
+  /** Where the file is downloaded from, e.g. "Project Gutenberg". */
+  source: string;
+  license: string;
+  description: string;
 }
 
 export type ThemePreference = "light" | "dark" | "system";

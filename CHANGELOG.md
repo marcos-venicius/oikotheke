@@ -6,6 +6,15 @@ All notable changes to Oikotheke are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-03
+
+### Added
+
+- Discover: 30 hand-picked, freely licensed books (Portuguese and English classics, and
+  programming books) that download from their official sources and import in one click. The
+  list is part of the app, so browsing it needs no internet connection.
+- Books imported from Discover show their source and license on the book page.
+
 ## [1.1.1] - 2026-09-30
 
 ### Changed
@@ -45,7 +54,8 @@ The first release: a local-first library and reader for PDF and EPUB books.
 
 - The app icon now shows in window switchers (alt-tab) on Linux.
 
-[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/marcos-venicius/oikotheke/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/marcos-venicius/oikotheke/releases/tag/v1.0.0

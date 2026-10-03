@@ -2,9 +2,11 @@
 //! Each operation orders its steps so a crash at any point leaves state that
 //! `reconcile` can repair.
 
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::Path;
 
+use crate::catalog;
 use crate::db::{books, Database};
 use crate::epub;
 use crate::error::{AppError, AppResult};
@@ -22,16 +24,45 @@ pub fn copy_into_library(
     if !fs::metadata(source)?.is_file() {
         return Err(AppError::UnsupportedFormat);
     }
-    let format = storage::detect_format(source)?.ok_or(AppError::UnsupportedFormat)?;
+    // Checked again on the copy; this only avoids copying a large file that isn't a book.
+    storage::detect_format(source)?.ok_or(AppError::UnsupportedFormat)?;
+    let title = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Untitled".into());
+    let origin = Origin {
+        title: &title,
+        catalog_id: None,
+    };
+    import_stream(db, storage, File::open(source)?, &origin, on_progress)
+}
 
+/// Where a book being imported comes from.
+pub struct Origin<'a> {
+    /// Shown until `finalize_import` reads the book's own metadata.
+    pub title: &'a str,
+    pub catalog_id: Option<&'a str>,
+}
+
+/// Copy stage of an import from any stream (a file or a download). The format is detected on
+/// the staged copy, so nothing is trusted before the bytes are on disk.
+pub fn import_stream(
+    db: &Database,
+    storage: &Storage,
+    source: impl Read,
+    origin: &Origin,
+    on_progress: impl FnMut(u64),
+) -> AppResult<Book> {
     let id = new_id();
     let staging = storage.staging_dir(&id)?;
     let final_dir = storage.book_dir(&id)?;
 
-    let copied = (|| {
+    let staged = (|| {
         fs::create_dir_all(&staging)?;
-        let target = staging.join(storage::book_file(format));
-        let copied = storage::copy_file(source, &target, on_progress)?;
+        let incoming = staging.join(storage::INCOMING_FILE);
+        let copied = storage::copy_stream(source, &incoming, on_progress)?;
+        let format = storage::detect_format(&incoming)?.ok_or(AppError::UnsupportedFormat)?;
+        fs::rename(&incoming, staging.join(storage::book_file(format)))?;
         if let Some(existing) = find_duplicate(db, storage, copied.size as i64, &copied.sha256)? {
             return Err(AppError::Duplicate {
                 title: existing.title,
@@ -39,27 +70,24 @@ pub fn copy_into_library(
             });
         }
         fs::rename(&staging, &final_dir)?;
-        Ok::<_, AppError>(copied)
+        Ok::<_, AppError>((copied, format))
     })();
-    let copied = match copied {
-        Ok(copied) => copied,
+    let (copied, format) = match staged {
+        Ok(staged) => staged,
         Err(err) => {
             let _ = storage::remove_dir(&staging);
             return Err(err);
         }
     };
 
-    let title = source
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "Untitled".into());
     let new_book = books::NewBook {
         id: &id,
         format,
-        title: &title,
+        title: origin.title,
         file_path: &Storage::book_rel(&id, format),
         file_size: copied.size as i64,
         content_hash: &copied.sha256,
+        catalog_id: origin.catalog_id,
     };
     let conn = db.conn();
     if let Err(err) = books::insert_importing(&conn, &new_book) {
@@ -67,6 +95,17 @@ pub fn copy_into_library(
         return Err(err);
     }
     books::get(&conn, &id)
+}
+
+/// Refuses to download a catalog book that is already in the library (or among removed books).
+pub fn ensure_not_downloaded(db: &Database, catalog_id: &str) -> AppResult<()> {
+    match books::find_by_catalog_id(&db.conn(), catalog_id)? {
+        Some(existing) => Err(AppError::Duplicate {
+            title: existing.title,
+            removed: existing.removed_at.is_some(),
+        }),
+        None => Ok(()),
+    }
 }
 
 /// The book already holding this content, if any. Books imported before hashes existed get
@@ -116,7 +155,8 @@ pub fn finalize_import(
     id: &str,
     meta: &BookMetadata,
 ) -> AppResult<Book> {
-    let format = books::get(&db.conn(), id)?.format;
+    let book = books::get(&db.conn(), id)?;
+    let format = book.format;
     let pages_ok = match format {
         BookFormat::Pdf => meta.page_count >= 1,
         BookFormat::Epub => meta.page_count == 0,
@@ -124,6 +164,20 @@ pub fn finalize_import(
     if !pages_ok {
         return Err(AppError::Invalid("page count".into()));
     }
+    // Catalog books keep the catalog's title and author: embedded metadata may use old spellings
+    // ("Memorias Posthumas de Braz Cubas") or add subtitles.
+    let from_catalog = book
+        .catalog_id
+        .as_deref()
+        .and_then(|c| catalog::get(c).ok());
+    let meta = match from_catalog {
+        Some(entry) => &BookMetadata {
+            title: entry.title.clone(),
+            author: Some(entry.author.clone()),
+            page_count: meta.page_count,
+        },
+        None => meta,
+    };
     let title = clean_text(&meta.title);
     let meta = BookMetadata {
         title: if title.is_empty() {
@@ -207,8 +261,6 @@ pub fn delete_permanently(db: &Database, storage: &Storage, id: &str) -> AppResu
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::fs::File;
-
     use super::*;
     use crate::models::BookStatus;
 
@@ -430,6 +482,109 @@ pub(crate) mod tests {
         assert!(matches!(result, Err(AppError::PermissionDenied(_))));
         assert!(storage.scan().unwrap().is_empty());
         assert!(books::list_all(&db.conn()).unwrap().is_empty());
+    }
+
+    fn from_catalog(id: &str) -> Origin<'_> {
+        Origin {
+            title: "Downloading",
+            catalog_id: Some(id),
+        }
+    }
+
+    #[test]
+    fn catalog_imports_keep_the_catalog_title_and_author() {
+        let (_dir, db, storage) = setup();
+        let bytes = b"%PDF-1.7\n% downloaded\n%%EOF";
+        let book = import_stream(
+            &db,
+            &storage,
+            &bytes[..],
+            &from_catalog("dom-casmurro"),
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(book.catalog_id.as_deref(), Some("dom-casmurro"));
+        assert_eq!(book.title, "Downloading");
+        assert_eq!(book.format, BookFormat::Pdf);
+        assert!(storage.resolve(&book.file_path).is_file());
+
+        let embedded = BookMetadata {
+            title: "Dom Casmurro, by Machado de Assis".into(),
+            author: Some("Joaquim Maria Machado de Assis".into()),
+            page_count: 2,
+        };
+        let book = finalize_import(&db, &storage, &book.id, &embedded).unwrap();
+        assert_eq!(book.title, "Dom Casmurro");
+        assert_eq!(book.author.as_deref(), Some("Machado de Assis"));
+        assert_eq!(book.page_count, 2);
+
+        // Already downloaded, even once removed; recovering a missing file is allowed.
+        assert!(matches!(
+            ensure_not_downloaded(&db, "dom-casmurro"),
+            Err(AppError::Duplicate { removed: false, .. })
+        ));
+        set_removed(&db, &book.id, true).unwrap();
+        assert!(matches!(
+            ensure_not_downloaded(&db, "dom-casmurro"),
+            Err(AppError::Duplicate { removed: true, .. })
+        ));
+        books::set_status(&db.conn(), &book.id, BookStatus::Missing).unwrap();
+        ensure_not_downloaded(&db, "dom-casmurro").unwrap();
+        ensure_not_downloaded(&db, "iracema").unwrap();
+    }
+
+    /// Yields some bytes, then fails like an interrupted download.
+    struct Interrupted(bool);
+
+    impl Read for Interrupted {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if std::mem::replace(&mut self.0, true) {
+                return Err(AppError::Network("the download was interrupted".into()).into_io());
+            }
+            buf[..5].copy_from_slice(b"%PDF-");
+            Ok(5)
+        }
+    }
+
+    #[test]
+    fn failed_streams_leave_nothing_behind() {
+        let (_dir, db, storage) = setup();
+        let origin = from_catalog("iracema");
+        let result = import_stream(&db, &storage, Interrupted(false), &origin, |_| {});
+        assert!(matches!(result, Err(AppError::Network(_))));
+        let result = import_stream(
+            &db,
+            &storage,
+            &b"<html>not a book</html>"[..],
+            &origin,
+            |_| {},
+        );
+        assert!(matches!(result, Err(AppError::UnsupportedFormat)));
+        assert!(storage.scan().unwrap().is_empty());
+        assert!(books::list_all(&db.conn()).unwrap().is_empty());
+    }
+
+    /// Downloads every catalog book for real. Network access, so run it by hand:
+    /// `cargo test catalog_downloads -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn catalog_downloads_are_books_of_the_declared_format() {
+        let (_dir, db, storage) = setup();
+        let mut failures = Vec::new();
+        for entry in catalog::entries() {
+            let result = crate::download::open(&entry.url).and_then(|download| {
+                let origin = from_catalog(&entry.id);
+                import_stream(&db, &storage, download.reader, &origin, |_| {})
+            });
+            match result {
+                Ok(book) if book.format == entry.format => {
+                    println!("ok   {} ({} KB)", entry.id, book.file_size / 1024)
+                }
+                Ok(book) => failures.push(format!("{}: got {:?}", entry.id, book.format)),
+                Err(err) => failures.push(format!("{}: {err}", entry.id)),
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
     }
 
     #[test]

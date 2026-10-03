@@ -92,6 +92,7 @@ mod tests {
                 file_path: "p",
                 file_size: 1,
                 content_hash: "h",
+                catalog_id: None,
             },
         )
         .unwrap();

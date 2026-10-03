@@ -11,6 +11,9 @@ The name comes from Greek *oîkos* (home) + *thḗkē* (case, repository): the h
 
 - **A shelf, not a file list.** Import PDF and EPUB books with the file picker or drag and drop;
   each one gets a cover, its title and author, and a reading-progress bar.
+- **Free books to start with.** Discover lists 30 hand-picked, freely licensed books —
+  Portuguese and English classics and programming books — that download from their official
+  sources and import in one click.
 - **Your own copy.** Every imported book is copied into the app's storage, so moving or deleting
   the original never breaks your library.
 - **Comfortable reading.** PDFs page by page with zoom and fit modes; EPUBs as book-like pages or

@@ -9,6 +9,8 @@ export type AppErrorKind =
   | "permissionDenied"
   | "diskFull"
   | "invalid"
+  | "network"
+  | "tooLarge"
   | "database"
   | "io"
   | "unknown";

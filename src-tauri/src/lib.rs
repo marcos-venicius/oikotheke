@@ -1,5 +1,7 @@
+mod catalog;
 mod commands;
 mod db;
+mod download;
 mod epub;
 mod error;
 mod import;
@@ -73,6 +75,8 @@ pub fn run() {
             commands::library::list_removed_books,
             commands::library::get_book,
             commands::library::import_books,
+            commands::library::list_catalog,
+            commands::library::import_from_catalog,
             commands::library::save_cover,
             commands::library::read_epub_metadata,
             commands::library::read_epub_cover,

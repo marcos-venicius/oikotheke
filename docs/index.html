@@ -28,6 +28,7 @@
         </a>
         <nav>
           <a href="#features">Features</a>
+          <a href="#discover">Free books</a>
           <a href="#install">Install</a>
           <a href="#changelog">Changelog</a>
           <a class="nav-gh" href="https://github.com/marcos-venicius/oikotheke">GitHub</a>
@@ -76,8 +77,9 @@
           <article>
             <h3>A shelf, not a file list</h3>
             <p>
-              Import books with the file picker or drag and drop. Each one gets its cover, title,
-              author and a progress bar — and the books you touched last come first.
+              Import books with the file picker or drag and drop, or pick free classics and
+              programming books from Discover. Each one gets its cover, title, author and a progress
+              bar — and the books you touched last come first.
             </p>
           </article>
           <article>
@@ -116,6 +118,55 @@
             </p>
           </article>
         </div>
+      </section>
+
+      <section id="discover" class="discover wrap">
+        <div class="discover-intro">
+          <h2>Free books, one click away</h2>
+          <p>
+            New library, empty shelf? Discover lists 30 hand-picked books you can read right away —
+            all in the public domain or under open licenses. Pick one, press Import, and it lands on
+            your shelf like any book of your own, cover included.
+          </p>
+        </div>
+        <figure class="shot">
+          <img
+            src="screenshots/discover.png"
+            alt="Discover: a grid of free books with an Import button under each"
+            width="1440"
+            height="580"
+            loading="lazy"
+          />
+          <figcaption>Discover, with the Portuguese classics first.</figcaption>
+        </figure>
+        <div class="grid">
+          <article>
+            <h3>Portuguese classics</h3>
+            <p>
+              Machado de Assis, Eça de Queirós, Camões, José de Alencar and Aluísio Azevedo — Dom
+              Casmurro, Os Maias, Os Lusíadas and more, from Project Gutenberg.
+            </p>
+          </article>
+          <article>
+            <h3>English classics</h3>
+            <p>
+              Austen, Shelley, Melville, Dostoevsky, Tolstoy, Fitzgerald and more, in the carefully
+              typeset editions of Standard Ebooks.
+            </p>
+          </article>
+          <article>
+            <h3>For programmers</h3>
+            <p>
+              SICP, Pro Git, Eloquent JavaScript, Think Python, Erickson's Algorithms, The Linux
+              Command Line and more, from their authors' official files.
+            </p>
+          </article>
+        </div>
+        <p class="discover-note">
+          The list is part of the app, so browsing it works offline. A book is downloaded only when
+          you import it, straight from its official source — nothing about you or your library is
+          sent.
+        </p>
       </section>
 
       <section class="gallery wrap" aria-label="Screenshots">
@@ -166,8 +217,9 @@
           <h2>Local-first, for real</h2>
           <p>
             There is no server to send anything to. Books, covers, progress and notes live in a
-            folder and a SQLite database on your computer, and the app works fully offline. If a
-            sync feature ever comes, it will be optional.
+            folder and a SQLite database on your computer, and the app works fully offline. The only
+            time it goes online is when you import a book from Discover, straight from the book's
+            official source. If a sync feature ever comes, it will be optional.
           </p>
         </div>
         <pre class="tree"><code>~/.local/share/io.github.marcos-venicius.oikotheke/

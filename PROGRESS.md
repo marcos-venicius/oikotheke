@@ -5,7 +5,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 ## Status
 
-**Current phase:** EPUB support complete (phases 1–4) — awaiting user feedback
+**Current phase:** Discover (1.2.0) complete — awaiting user feedback
 **Next step:** user reinstalls (`scripts/install.sh`; migrates their real DB to schema 3) and checks import errors via the picker. Candidate follow-ups (not started):
 - Continuous-scroll reading mode (virtualized, reusing `PageRenderer`).
 - Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
@@ -30,6 +30,18 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
+
+## Discover, 1.2.0 (2026-10-02)
+
+- User request: a list of free books (Portuguese/English classics, technical books) to download and import. Decisions: name **Discover**, catalog **bundled** in the app, **30** curated books. First network access of the app — rules in CLAUDE.md "Network access".
+- `src-tauri/catalog.json` (`include_str!`, parsed once in `catalog.rs`; `url` is `skip_serializing`). Sources: Gutenberg `…/ebooks/<n>.epub3.images` (pt), Standard Ebooks `…/downloads/<file>.epub?source=download` (without `?source=download` SE returns an HTML page), official author files for technical books (GitHub releases/LFS and SourceForge redirect to CDNs). Licenses checked on each official page (2026-10-02).
+- `download.rs`: **ureq 3** (`default-features = false, features = ["rustls"]`: no gzip, so `Content-Length` is the file size; rustls + ring + webpki-roots, all MIT/Apache/ISC/CDLA-Permissive). `https_only` covers redirects; `max_redirects(5)`; connect 20 s, response 30 s, body 30 min (ureq has no per-read timeout). `Capped` reader enforces 200 MB and turns read errors into `AppError::Network`; `AppError::into_io()` + `From<io::Error>` carry an `AppError` through `Read` unchanged.
+- Import refactor: `copy_into_library(path)` = pre-check + `import_stream(reader, Origin { title, catalog_id })`. The stream is staged as `book.part`, the format is detected on the staged file, then renamed to `book.pdf|epub`; duplicate check, rename and insert unchanged. `storage::copy_file` → `copy_stream(impl Read, …)`. `ImportJob.source` is `ImportSource::{Path, Catalog}`; catalog jobs start with `totalBytes: 0` and progress events carry the real total (the UI now updates `totalBytes` from them).
+- Migration 5: `books.catalog_id` (+ index). `finalize_import` uses the catalog's title/author for catalog books. `ensure_not_downloaded` refuses a catalog book already present (removed too; `missing` ignored), checked in the command and again in the worker.
+- UI: `features/discover/DiscoverPage.tsx` (shelves, search, typographic `PlaceholderCover` exported from `BookCover.tsx`, action per `catalogStatus`), `lib/catalog.ts` (+ tests), Discover buttons on the library header and empty state, `ImportCard` says "Downloading…", book page shows Source/License. Import toasts moved to `useImportNotifications` (used by Library and Discover).
+- Verified: 74 Rust tests + 1 ignored (incl. a local `TcpListener` server: success, redirect, 404, refused connection, truncated body, size cap announced/streamed, plain http refused) and 48 vitest. **All 30 catalog URLs downloaded and imported for real** with the ignored test `cargo test catalog_downloads -- --ignored --nocapture` (largest: Erickson's Algorithms, 24 MB). In the dev app (scratch XDG dirs, X11): Discover renders, Dom Casmurro (EPUB) and SICP (PDF) download with progress on both pages, get real covers and catalog titles, open in the readers, cards switch to "Open", book page shows source and license. Not tested in the app: the offline failure toast (covered by the unit test of the error message; the toast path is the one file imports use).
+- Website: new "Free books, one click away" section (`#discover`, nav link "Free books") between Features and the gallery, with `docs/screenshots/discover.png` (dev app, light theme, 1440 px window via `XResizeWindow`, cropped to the first row so no text is cut) and the three shelves as `.grid` cards. Previewed with headless Chrome at 1280 and 390 px.
+- Driving the dev app: scratch `xt.py` finds the window by `_NET_WM_PID` of `target/debug/oikotheke` (the user's installed app may be open too). The first click on the window may only focus it.
 
 ## Windows installer, 1.1.0 (2026-09-29)
 
@@ -154,6 +166,8 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 ## Known issues / TODO
 
+- Discover downloads can't be cancelled, and the import worker is sequential: a stalled download holds the queue until the 30-minute body timeout.
+
 - Two app instances (e.g. installed + `tauri dev`) share one database and overwrite each other's reading state. Consider `tauri-plugin-single-instance`.
 
 - pdf.js walks the whole page tree on open (`checkLastPage`), touching one 64 KB chunk per page object. Measured on a synthetic 600 MB / 600-page file: ~38 MB read on open (x2 in dev due to StrictMode double effects), then **0 bytes** for page turns and jumps. Real PDFs usually cluster page objects, so it's typically far less.
@@ -166,7 +180,8 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 ## Notes for AI
 
 ### Backend map (`src-tauri/src`)
-- `error.rs` AppError → `{ kind, message }` (kinds: notFound, notPdf, permissionDenied, diskFull, invalid, database, io)
+- `error.rs` AppError → `{ kind, message }` (kinds: notFound, unsupportedFormat, unreadable, drm, duplicate, permissionDenied, diskFull, invalid, network, tooLarge, database, io)
+- `catalog.rs` bundled Discover catalog (`catalog.json`); `download.rs` HTTPS download (ureq) with size cap
 - `db/` repositories as free functions over `&Connection`; `Database::conn()` returns the mutex guard
 - `storage/` layout + `copy_file` (1 MB chunks, fsync) + `write_atomic`; ids validated as UUID
 - `services/library.rs` import copy/finalize/abort, soft remove, permanent delete via `.trash-<id>`
@@ -174,7 +189,7 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - `protocol.rs` `oikotheke://localhost/{book|cover}/<id>` (use `convertFileSrc("book/<id>", "oikotheke")`)
 - Notes: `services/notes.rs` validates (trimmed, non-empty, ≤ 20k chars, location valid for the book via `services/location.rs`). Commands list_notes, create_note(bookId, location, label?, content), update_note, delete_note.
 - Progress: `services/progress.rs` validates location + progress (0..1) before `db::books::update_progress`.
-- Commands: list_books, list_removed_books, get_book, import_books, save_cover, finalize_import, abort_import, remove_book, restore_book, delete_book, get_settings, set_setting
+- Commands: list_books, list_removed_books, get_book, import_books, list_catalog, import_from_catalog, save_cover, finalize_import, abort_import, remove_book, restore_book, delete_book, get_settings, set_setting
 
 - Commits: Conventional Commits, English. Remote `origin` = `marcos-venicius/oikotheke` (private); push only when the user asks. **Never add `Co-Authored-By` or any AI attribution.**
 - Library versions are recent (pdfjs-dist 6, react-router 8, vitest 5, TypeScript 6, ESLint 10): check `node_modules/*/` typings before assuming APIs.
@@ -195,4 +210,4 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - `app/theme.tsx` ThemeProvider (preference in DB `settings.theme`, cached in localStorage `oikotheke:theme`, applied pre-paint by the inline script in `index.html`).
 - `services/ipc.ts` `call()` wraps `invoke` and throws `AppError { kind }`; `describeError()` for user messages.
 - `components/` Button, IconButton, ThemeToggle. `lib/cn.ts` class joiner.
-- Routes (MemoryRouter): `/` library, `/book/:id` details, `/read/:id` reader.
+- Routes (MemoryRouter): `/` library, `/discover` Discover, `/book/:id` details, `/read/:id` reader.

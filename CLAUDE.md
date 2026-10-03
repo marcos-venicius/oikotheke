@@ -35,11 +35,12 @@ The core principle is **local-first**:
 - All files stay on the user's machine.
 - No PDF is ever uploaded to a server.
 - Library information, reading progress and notes are stored locally.
-- The application works fully offline.
+- The application works fully offline. The only exception is a Discover import, which the user
+  starts explicitly (see [Network access](#network-access)).
 
-**Status:** version 1.1.1 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
+**Status:** version 1.2.0 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
 install) and renamed to Oikotheke. PDF and EPUB are fully supported (import, reading,
-progress, notes).
+progress, notes). Discover offers 30 free books to download and import.
 
 ## Goals
 
@@ -70,6 +71,23 @@ Do not assume any of:
 - External storage services.
 
 Any future sync feature must be additive and never required for basic use.
+
+### Network access
+
+The app goes online for one thing only: **downloading a Discover book the user chose to
+import**. Rules:
+
+- Only on an explicit click; never in the background, never to list the catalog.
+- Only URLs bundled in the app (`src-tauri/catalog.json`). The UI asks by catalog id and never
+  sees or chooses a URL.
+- Done by Rust (`download.rs`, ureq + rustls), HTTPS on every hop (redirects capped at 5),
+  200 MB cap enforced while streaming, timeouts. The request carries no cookies and nothing
+  about the user or library (only `User-Agent: Oikotheke/<version>`).
+- The webview never reaches the network: the CSP is unchanged.
+- A downloaded file is as untrusted as a picked one: it goes through the same import pipeline
+  (format detection on the staged copy, DRM/damage checks, sanitizer when read).
+
+Any new network use needs an explicit product decision recorded here.
 
 ### File preservation
 
@@ -139,6 +157,28 @@ any `encryption.xml` algorithm other than font obfuscation) are rejected the sam
 Import must handle large files and never load a whole book into memory unnecessarily (EPUB
 reads touch only the ZIP directory and small, size-capped entries). The UI must never block
 while files are copied.
+
+### Discover
+
+`/discover` lists 30 hand-picked, freely licensed books bundled with the app
+(`src-tauri/catalog.json`): 10 Portuguese classics (Project Gutenberg), 10 English classics
+(Standard Ebooks) and 10 technical books for programmers (official author/publisher files).
+Each entry has id, title, author, year, language, category (`classic` | `technical`), format,
+URL (never sent to the UI), source, license and description.
+
+- Shelves (All, Portuguese classics, English classics, Technical) and an accent-insensitive
+  title/author search (`ui/lib/catalog.ts`).
+- Typographic covers only: opening Discover makes no request.
+- "Import" queues a download job in the same import queue as files (`import_from_catalog`):
+  the body is streamed into staging with progress, then the normal import continues. The book
+  keeps the catalog's title and author (embedded metadata may use old spellings), and its
+  `catalogId` links it to the entry: Discover shows "Open" for books on the shelf, a hint for
+  removed ones, and refuses to download a book already in the library (a book whose file is
+  `missing` can be downloaded again). The hash check still catches the same file picked by hand.
+- The book page shows the entry's source and license.
+- Only books that may be downloaded freely from an official source qualify. Check the license on
+  the official page before adding one; run the ignored test
+  `cargo test catalog_downloads -- --ignored` after changing URLs (it downloads all of them).
 
 ### Removal
 
@@ -326,6 +366,7 @@ Book
 ├── fileSize     bytes
 ├── contentHash? SHA-256 of the file, backend only (duplicate detection); null until needed
 ├── status       importing | ready | missing
+├── catalogId?   Discover entry the book was downloaded from; null for the user's own files
 ├── removedAt?   set when soft-removed
 ├── createdAt
 ├── updatedAt
@@ -352,7 +393,8 @@ Key/value pairs: `theme` (light | dark | system), `epub.fontSize` (percent), `ep
 
 Schema changes go through append-only migrations (`src-tauri/src/db/migrations.rs`); never
 edit an existing migration. Migration 3 replaced `books.current_page` and
-`notes.page_number` with locations, losslessly; migration 4 added `books.content_hash`.
+`notes.page_number` with locations, losslessly; migration 4 added `books.content_hash`;
+migration 5 added `books.catalog_id`.
 
 ## Formats
 
@@ -389,7 +431,8 @@ By default, book content and notes stay local. Never send to any server:
 - Personal library metadata.
 
 No analytics, telemetry or external services without an explicit product decision. The
-release build ships with a strict CSP.
+release build ships with a strict CSP. The only network access is a user-started Discover
+download (see [Network access](#network-access)).
 
 ### Book content is untrusted
 
@@ -427,8 +470,8 @@ Book      → document info, progress and notes
 Reader    → reading, navigation and notes
 ```
 
-Routes: `/` library, `/book/:id` details, `/read/:id` reader. Light, dark and system themes.
-Avoid excess controls while reading; secondary tools live in toolbars, panels or menus.
+Routes: `/` library, `/discover` free books, `/book/:id` details, `/read/:id` reader. Light,
+dark and system themes. Avoid excess controls while reading; secondary tools live in toolbars, panels or menus.
 
 ## Architecture
 
@@ -437,12 +480,14 @@ Business logic must not be coupled to the UI:
 ```text
 UI (ui/features)
 ├── Library
+├── Discover
 ├── Book Details
 └── Reader
         │
         ▼
 Application services (ui/services → Tauri commands → src-tauri/src/services)
 ├── Library service (import, remove, restore, delete, reconcile)
+├── Catalog + download (Discover: bundled catalog, HTTPS download into the import queue)
 ├── PDF service (pdf.js: metadata, covers, rendering)
 ├── EPUB service (backend: detection, metadata, cover; UI: foliate-js loading, sanitizer)
 ├── Reading progress service
@@ -459,7 +504,8 @@ Persistence (Rust)
 
 ## Stack
 
-- **Tauri 2** (Rust): storage, SQLite (rusqlite), import queue, `oikotheke://` protocol.
+- **Tauri 2** (Rust): storage, SQLite (rusqlite), import queue, `oikotheke://` protocol;
+  **ureq** (rustls, webpki roots) for Discover downloads.
 - **React 19 + TypeScript + Vite** in `ui/` (not `src/`); alias `@/` → `ui/`.
 - **Tailwind CSS v4** with CSS-variable design tokens; **pdf.js** for PDF parsing/rendering;
   **foliate-js** + **@zip.js/zip.js** for EPUB reading (`zip` + `quick-xml` in Rust for import);
@@ -480,7 +526,8 @@ vitest 5): check the installed typings in `node_modules` before assuming an API.
 
 ### Offline
 
-All core features work fully offline.
+All core features work fully offline. Discover lists its books offline; only importing one
+needs a connection.
 
 ### Cross-platform
 
@@ -554,6 +601,7 @@ sync. Running the workflow by hand on another branch (`gh workflow run release.y
 - Web links in books open in the browser after confirmation.
 - Versioning (SemVer, changelog), GitHub releases and the website (1.0.0).
 - Windows installer, built and attached to each release by CI (1.1.0).
+- Discover: 30 free books downloaded from official sources into the library (1.2.0).
 
 ### Out of scope (for now)
 

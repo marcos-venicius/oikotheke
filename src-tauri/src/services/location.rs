@@ -61,6 +61,7 @@ mod tests {
             removed_at: None,
             created_at: 0,
             updated_at: 0,
+            catalog_id: None,
             note_count: 0,
         }
     }

@@ -14,6 +14,8 @@ use crate::models::BookFormat;
 
 pub const LIBRARY_DIR: &str = "library";
 pub const COVER_FILE: &str = "cover.jpg";
+/// A book being copied into staging, before its format is known.
+pub const INCOMING_FILE: &str = "book.part";
 const STAGING_PREFIX: &str = ".staging-";
 const TRASH_PREFIX: &str = ".trash-";
 const COPY_CHUNK: usize = 1024 * 1024;
@@ -139,10 +141,14 @@ pub struct Copied {
     pub sha256: String,
 }
 
-/// Streams `src` into `dst` in fixed-size chunks, hashing on the way, and fsyncs it. Never
-/// holds the whole file in memory.
-pub fn copy_file(src: &Path, dst: &Path, mut on_progress: impl FnMut(u64)) -> AppResult<Copied> {
-    let mut reader = BufReader::with_capacity(COPY_CHUNK, File::open(src)?);
+/// Streams `src` (a file or a download) into `dst` in fixed-size chunks, hashing on the way,
+/// and fsyncs it. Never holds the whole book in memory.
+pub fn copy_stream(
+    src: impl Read,
+    dst: &Path,
+    mut on_progress: impl FnMut(u64),
+) -> AppResult<Copied> {
+    let mut reader = BufReader::with_capacity(COPY_CHUNK, src);
     let file = File::create(dst)?;
     let mut writer = BufWriter::with_capacity(COPY_CHUNK, file);
     let mut hasher = Sha256::new();
@@ -232,7 +238,7 @@ mod tests {
         fs::write(&src, &data).unwrap();
 
         let mut calls = 0;
-        let copied = copy_file(&src, &dst, |_| calls += 1).unwrap();
+        let copied = copy_stream(File::open(&src).unwrap(), &dst, |_| calls += 1).unwrap();
         assert_eq!(copied.size, data.len() as u64);
         assert_eq!(calls, 3);
         assert_eq!(fs::read(&dst).unwrap(), data);

@@ -1,6 +1,6 @@
 [package]
 name = "oikotheke"
-version = "1.1.1"
+version = "1.2.0"
 description = "Local-first book library and reader"
 authors = ["Marcos Sousa"]
 license = "MIT"
@@ -34,6 +34,7 @@ zip = { version = "8", default-features = false, features = ["deflate-flate2-zli
 quick-xml = "0.42"
 tauri-plugin-opener = "2"
 sha2 = "0.10"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Only to set the GTK program class (the window class / Wayland app_id).

@@ -66,6 +66,11 @@ CREATE INDEX idx_notes_book ON notes(book_id);
 ALTER TABLE books ADD COLUMN content_hash TEXT;
 CREATE INDEX idx_books_size ON books(file_size);
 "#,
+    // 5: the Discover catalog entry a book was downloaded from (null for files the user picked).
+    r#"
+ALTER TABLE books ADD COLUMN catalog_id TEXT;
+CREATE INDEX idx_books_catalog ON books(catalog_id);
+"#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {
@@ -160,5 +165,23 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))
             .unwrap();
         assert_eq!(left, 1);
+    }
+
+    #[test]
+    fn catalog_migration_leaves_existing_books_unlinked() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 4).unwrap();
+        conn.execute_batch(
+            "INSERT INTO books (id, title, file_path, status, created_at, updated_at)
+             VALUES ('a', 'a', 'p', 'ready', 1, 2);",
+        )
+        .unwrap();
+        migrate(&mut conn).unwrap();
+        let catalog_id: Option<String> = conn
+            .query_row("SELECT catalog_id FROM books WHERE id = 'a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(catalog_id, None);
     }
 }

@@ -1,5 +1,5 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { Book, BookMetadata, ImportJob } from "@/lib/types";
+import type { Book, BookMetadata, CatalogEntry, ImportJob } from "@/lib/types";
 import { call, type AppError } from "./ipc";
 
 export interface ImportProgressEvent {
@@ -25,6 +25,10 @@ export const libraryService = {
 
   /** Queues files for a background copy; returns immediately. */
   importFiles: (paths: string[]) => call<ImportJob[]>("import_books", { paths }),
+  /** The Discover catalog (bundled; no network). */
+  listCatalog: () => call<CatalogEntry[]>("list_catalog"),
+  /** Queues the download and import of a Discover book; returns immediately. */
+  importFromCatalog: (id: string) => call<ImportJob>("import_from_catalog", { id }),
   saveCover: (id: string, bytes: Uint8Array) =>
     call<void>("save_cover", bytes, { headers: { "book-id": id } }),
   finalizeImport: (id: string, metadata: BookMetadata) =>

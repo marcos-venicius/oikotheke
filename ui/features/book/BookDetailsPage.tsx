@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, BookOpen, CircleAlert, Trash2 } from "lucide-react";
-import type { Book, Note } from "@/lib/types";
+import type { Book, CatalogEntry, Note } from "@/lib/types";
 import { formatBytes, formatDate, formatRelative, plural } from "@/lib/format";
 import { describePosition, formatLabel } from "@/lib/location";
 import { Button, IconButton } from "@/components/Button";
@@ -17,7 +17,7 @@ import { groupNotes } from "@/lib/notes";
 type State =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; book: Book; notes: Note[] };
+  | { status: "ready"; book: Book; notes: Note[]; origin?: CatalogEntry };
 
 export function BookDetailsPage() {
   const { id = "" } = useParams();
@@ -27,8 +27,11 @@ export function BookDetailsPage() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([libraryService.getBook(id), notesService.list(id)])
-      .then(([book, notes]) => active && setState({ status: "ready", book, notes, id }))
+    Promise.all([libraryService.getBook(id), notesService.list(id), libraryService.listCatalog()])
+      .then(([book, notes, catalog]) => {
+        const origin = catalog.find((entry) => entry.id === book.catalogId);
+        if (active) setState({ status: "ready", book, notes, origin, id });
+      })
       .catch((error) => active && setState({ status: "error", message: describeError(error), id }));
     return () => {
       active = false;
@@ -77,6 +80,7 @@ export function BookDetailsPage() {
             <Details
               book={current.book}
               notes={current.notes}
+              origin={current.origin}
               onRead={(location) =>
                 navigate(`/read/${current.book.id}`, location ? { state: { location } } : undefined)
               }
@@ -98,11 +102,14 @@ export function BookDetailsPage() {
 function Details({
   book,
   notes,
+  origin,
   onRead,
   onRemove,
 }: {
   book: Book;
   notes: Note[];
+  /** The Discover entry the book was downloaded from. */
+  origin?: CatalogEntry;
   onRead: (location?: string) => void;
   onRemove: () => void;
 }) {
@@ -115,6 +122,12 @@ function Details({
     ["Size", formatBytes(book.fileSize)],
     ["Added", formatDate(book.createdAt)],
     ["Last activity", formatRelative(book.updatedAt)],
+    ...(origin
+      ? [
+          ["Source", origin.source],
+          ["License", origin.license],
+        ]
+      : []),
   ];
 
   return (

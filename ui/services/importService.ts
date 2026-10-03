@@ -1,4 +1,4 @@
-import type { Book, BookFormat, BookMetadata } from "@/lib/types";
+import type { Book, BookFormat, BookMetadata, ImportJob } from "@/lib/types";
 import { createStore } from "@/lib/store";
 import { imageToCover } from "./coverImage";
 import { epubService } from "./epubService";
@@ -15,6 +15,8 @@ export interface ImportJobState {
   copiedBytes: number;
   stage: ImportStage;
   error?: string;
+  /** Set when the job downloads a Discover book. */
+  catalogId?: string | null;
 }
 
 /** Imports in flight, in the order they were started. */
@@ -33,6 +35,13 @@ function updateJob(jobId: string, patch: Partial<ImportJobState>) {
 
 function removeJob(jobId: string) {
   importJobs.set((jobs) => jobs.filter((j) => j.jobId !== jobId));
+}
+
+function addJobs(jobs: ImportJob[]) {
+  importJobs.set((current) => [
+    ...current,
+    ...jobs.map((job) => ({ ...job, copiedBytes: 0, stage: "queued" as const })),
+  ]);
 }
 
 function fail(jobId: string, error: string) {
@@ -143,8 +152,9 @@ export const importService = {
   init() {
     if (initialized) return;
     initialized = true;
-    void libraryService.onImportProgress(({ jobId, copiedBytes }) =>
-      updateJob(jobId, { stage: "copying", copiedBytes }),
+    // Downloads learn their size only once the server answers.
+    void libraryService.onImportProgress(({ jobId, copiedBytes, totalBytes }) =>
+      updateJob(jobId, { stage: "copying", copiedBytes, totalBytes }),
     );
     void libraryService.onImportCopied(({ jobId, book }) => {
       updateJob(jobId, { copiedBytes: book.fileSize });
@@ -155,11 +165,12 @@ export const importService = {
 
   async importFiles(paths: string[]) {
     if (paths.length === 0) return;
-    const jobs = await libraryService.importFiles(paths);
-    importJobs.set((current) => [
-      ...current,
-      ...jobs.map((job) => ({ ...job, copiedBytes: 0, stage: "queued" as const })),
-    ]);
+    addJobs(await libraryService.importFiles(paths));
+  },
+
+  /** Downloads a Discover book in the background, then imports it like a file. */
+  async importFromCatalog(id: string) {
+    addJobs([await libraryService.importFromCatalog(id)]);
   },
 
   /** Completes imports interrupted by a previous shutdown (file copied, not processed). */

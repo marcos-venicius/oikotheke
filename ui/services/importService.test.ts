@@ -5,10 +5,11 @@ import { AppError } from "./ipc";
 const epub = vi.hoisted(() => ({ readMetadata: vi.fn(), readCover: vi.fn() }));
 vi.mock("./epubService", () => ({ epubService: epub }));
 vi.mock("./coverImage", () => ({ imageToCover: async () => new Uint8Array([1, 2, 3]) }));
-vi.mock("./libraryService", () => ({ libraryService: {} }));
+const library = vi.hoisted(() => ({ importFromCatalog: vi.fn() }));
+vi.mock("./libraryService", () => ({ libraryService: library }));
 vi.mock("./pdfService", () => ({}));
 
-const { extractBook, UnreadableBook } = await import("./importService");
+const { extractBook, importJobs, importService, UnreadableBook } = await import("./importService");
 
 const book = { id: "b", format: "epub", title: "file name" } as Book;
 
@@ -56,5 +57,28 @@ describe("extractBook (EPUB)", () => {
     epub.readMetadata.mockRejectedValue({ kind: "database", message: "locked" });
     const error = await extractBook(book).catch((e: unknown) => e);
     expect(error).not.toBeInstanceOf(UnreadableBook);
+  });
+});
+
+describe("importFromCatalog", () => {
+  it("tracks the download as a queued job tied to its catalog entry", async () => {
+    library.importFromCatalog.mockResolvedValue({
+      jobId: "j",
+      fileName: "Dom Casmurro",
+      totalBytes: 0,
+      catalogId: "dom-casmurro",
+    });
+    await importService.importFromCatalog("dom-casmurro");
+    expect(library.importFromCatalog).toHaveBeenCalledWith("dom-casmurro");
+    expect(importJobs.get()).toEqual([
+      {
+        jobId: "j",
+        fileName: "Dom Casmurro",
+        totalBytes: 0,
+        copiedBytes: 0,
+        stage: "queued",
+        catalogId: "dom-casmurro",
+      },
+    ]);
   });
 });

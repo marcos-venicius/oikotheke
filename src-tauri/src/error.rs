@@ -24,6 +24,10 @@ pub enum AppError {
     DiskFull,
     #[error("Invalid input: {0}")]
     Invalid(String),
+    #[error("Couldn't download the book ({0})")]
+    Network(String),
+    #[error("The book is larger than the {} MB download limit", .0 / (1024 * 1024))]
+    TooLarge(u64),
     #[error("Database error: {0}")]
     Db(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
@@ -41,6 +45,8 @@ impl AppError {
             AppError::PermissionDenied(_) => "permissionDenied",
             AppError::DiskFull => "diskFull",
             AppError::Invalid(_) => "invalid",
+            AppError::Network(_) => "network",
+            AppError::TooLarge(_) => "tooLarge",
             AppError::Db(_) => "database",
             AppError::Io(_) => "io",
         }
@@ -50,12 +56,25 @@ impl AppError {
 impl From<std::io::Error> for AppError {
     fn from(err: std::io::Error) -> Self {
         use std::io::ErrorKind;
+        // A reader can fail with an `AppError` of its own (see `into_io`): unwrap it.
+        if err.get_ref().is_some_and(|inner| inner.is::<AppError>()) {
+            let inner = err.into_inner().and_then(|e| e.downcast::<AppError>().ok());
+            return *inner.expect("checked above");
+        }
         match err.kind() {
             ErrorKind::PermissionDenied => AppError::PermissionDenied(err.to_string()),
             ErrorKind::StorageFull => AppError::DiskFull,
             ErrorKind::NotFound => AppError::NotFound(err.to_string()),
             _ => AppError::Io(err),
         }
+    }
+}
+
+impl AppError {
+    /// Wraps the error in an `io::Error`, for `Read` implementations; `From<io::Error>` gives it
+    /// back unchanged.
+    pub fn into_io(self) -> std::io::Error {
+        std::io::Error::other(self)
     }
 }
 
@@ -89,6 +108,16 @@ mod tests {
             "notFound"
         );
         assert_eq!(AppError::from(Error::from(ErrorKind::Other)).kind(), "io");
+    }
+
+    #[test]
+    fn app_errors_survive_a_trip_through_io() {
+        let err = AppError::from(AppError::TooLarge(200 * 1024 * 1024).into_io());
+        assert!(matches!(err, AppError::TooLarge(_)));
+        assert_eq!(
+            err.to_string(),
+            "The book is larger than the 200 MB download limit"
+        );
     }
 
     #[test]

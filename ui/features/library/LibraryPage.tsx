@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ArrowLeft, BookOpen, FileDown, Plus } from "lucide-react";
+import { ArrowLeft, BookOpen, Compass, FileDown, Plus } from "lucide-react";
 import type { Book } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { Button, IconButton } from "@/components/Button";
@@ -15,6 +15,7 @@ import { ImportCard } from "./ImportCard";
 import { RemoveBookDialog, type RemoveMode } from "./RemoveBookDialog";
 import { libraryStore, refreshLibrary } from "./libraryStore";
 import { useFileDrop } from "./useFileDrop";
+import { useImportNotifications } from "./useImportNotifications";
 
 type View = "shelf" | "removed";
 
@@ -45,6 +46,7 @@ export function LibraryPage() {
     permanentOnly: boolean;
   } | null>(null);
 
+  useImportNotifications();
   useEffect(() => {
     importService.init();
     refreshLibrary()
@@ -52,18 +54,6 @@ export function LibraryPage() {
       .catch((error) =>
         toast("Could not load the library", { tone: "error", description: describeError(error) }),
       );
-
-    const offReady = importService.onBookReady((book) => {
-      void refreshLibrary();
-      toast(`Added “${book.title}”`, { tone: "success" });
-    });
-    const offFailure = importService.onFailure((job) =>
-      toast(`Couldn't import ${job.fileName}`, { tone: "error", description: job.error }),
-    );
-    return () => {
-      offReady();
-      offFailure();
-    };
   }, []);
 
   const hovering = useFileDrop(useCallback((paths: string[]) => void importPaths(paths), []));
@@ -115,6 +105,12 @@ export function LibraryPage() {
             </Button>
           )}
           {!showRemoved && (
+            <Button variant="ghost" onClick={() => navigate("/discover")}>
+              <Compass className="size-4" strokeWidth={1.75} />
+              Discover
+            </Button>
+          )}
+          {!showRemoved && (
             <Button variant="primary" onClick={() => void pickFiles()} className="mr-1">
               <Plus className="size-4" strokeWidth={2} />
               Import
@@ -129,7 +125,10 @@ export function LibraryPage() {
           showRemoved ? (
             <p className="mt-24 text-center text-sm text-muted">Nothing here.</p>
           ) : (
-            <EmptyState onImport={() => void pickFiles()} />
+            <EmptyState
+              onImport={() => void pickFiles()}
+              onDiscover={() => navigate("/discover")}
+            />
           )
         ) : (
           <div className="mx-auto grid max-w-[1400px] grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-x-7 gap-y-10">
@@ -175,7 +174,7 @@ export function LibraryPage() {
   );
 }
 
-function EmptyState({ onImport }: { onImport: () => void }) {
+function EmptyState({ onImport, onDiscover }: { onImport: () => void; onDiscover: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center pb-16 text-center">
       <div className="flex size-14 items-center justify-center rounded-2xl bg-surface-2">
@@ -186,10 +185,16 @@ function EmptyState({ onImport }: { onImport: () => void }) {
         Import PDF or EPUB books, or drop them anywhere in this window. Files are copied and stay on
         this computer.
       </p>
-      <Button variant="primary" className="mt-6" onClick={onImport}>
-        <Plus className="size-4" strokeWidth={2} />
-        Import books
-      </Button>
+      <div className="mt-6 flex gap-2">
+        <Button variant="primary" onClick={onImport}>
+          <Plus className="size-4" strokeWidth={2} />
+          Import books
+        </Button>
+        <Button onClick={onDiscover}>
+          <Compass className="size-4" strokeWidth={1.75} />
+          Browse free books
+        </Button>
+      </div>
     </div>
   );
 }
