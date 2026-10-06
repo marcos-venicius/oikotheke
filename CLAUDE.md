@@ -38,9 +38,9 @@ The core principle is **local-first**:
 - The application works fully offline. The only exception is a Discover import, which the user
   starts explicitly (see [Network access](#network-access)).
 
-**Status:** version 1.2.0 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
+**Status:** version 1.3.0 (see `CHANGELOG.md`). v1 is complete (library, reader, progress, notes, book details, hardening, Linux
 install) and renamed to Oikotheke. PDF and EPUB are fully supported (import, reading,
-progress, notes). Discover offers 30 free books to download and import.
+progress, notes, search). Discover offers 30 free books to download and import.
 
 ## Goals
 
@@ -251,6 +251,9 @@ The PDF reader:
 - Supports zoom and fit modes: fit page, fit width, fit height, custom zoom. Zoom in/out also
   with +/− (with or without Ctrl) and Ctrl + mouse wheel.
 - Has a focus mode (full screen, minimal chrome).
+- Lets the user select and copy text: pdf.js's text layer (invisible text over the canvas) is
+  built for the current page only. Ctrl+A selects that page's text.
+- Searches the book (see [Search](#search)).
 - Returns to the library/book page.
 
 Large files are streamed: the PDF is served through the `oikotheke://` protocol with HTTP
@@ -267,11 +270,30 @@ EPUBs reflow, so there are no fixed pages. The EPUB reader uses
   percentage bar, which also shows the current chapter.
 - Changes the font size (80–200%), also with +/− (with or without Ctrl) and Ctrl + mouse wheel.
 - Follows the app theme: pages take the app background; dark mode forces readable text.
-- Has the same focus mode and returns to the library.
+- Has the same focus mode, search (see [Search](#search)), and returns to the library.
+
+Text selection is the browser's own, inside the book's iframes.
 
 Font size and layout are app-wide preferences (`epub.fontSize`, `epub.flow` in settings), not
 per book. The book is read through the `oikotheke://` protocol with HTTP Range requests
 (zip.js), so only the ZIP directory and the chapters being shown are fetched.
+
+### Search
+
+Ctrl+F (or the toolbar) opens a search field over the page. Matching ignores case and accents.
+The first hit at or after the reading position is shown, the bar shows "current / total"
+while the book is scanned, Enter / Shift+Enter and F3 / Shift+F3 step through the hits, and Esc
+closes the search (a second Esc leaves the reader).
+
+- The `SearchBar` and the `useSearch` hook know nothing about formats; each reader supplies a
+  scan (an async generator of hits per page/chapter) and how to show a hit.
+- PDF: page texts are extracted with pdf.js once per reading session (strings only), folded and
+  matched by `reader/pdfSearch.ts`; hits on the current page are highlighted in the text layer
+  with the CSS Custom Highlight API (no highlight where it is unsupported).
+- EPUB: foliate-js `view.search()`; it outlines the hits. Chapters are parsed for searching,
+  never displayed, so the sanitizer and CSP rules are unchanged.
+
+Search is explicit and in memory: nothing about it is stored.
 
 ## Reading progress
 
@@ -473,6 +495,11 @@ Reader    → reading, navigation and notes
 Routes: `/` library, `/discover` free books, `/book/:id` details, `/read/:id` reader. Light,
 dark and system themes. Avoid excess controls while reading; secondary tools live in toolbars, panels or menus.
 
+Keyboard: Ctrl+Q closes the app from anywhere (like the window's close button, so the reader
+flushes its position first; it needs `core:window:allow-close`, and the EPUB reader forwards it
+from the book's iframes). Esc goes back: from the book page and the reader to the library, after
+closing whatever is open (dialog, search, contents, focus mode).
+
 ## Architecture
 
 Business logic must not be coupled to the UI:
@@ -602,6 +629,8 @@ sync. Running the workflow by hand on another branch (`gh workflow run release.y
 - Versioning (SemVer, changelog), GitHub releases and the website (1.0.0).
 - Windows installer, built and attached to each release by CI (1.1.0).
 - Discover: 30 free books downloaded from official sources into the library (1.2.0).
+- PDF text selection and copy, search in PDF and EPUB, Ctrl+Q to quit, Esc on the book page
+  (1.3.0).
 
 ### Out of scope (for now)
 

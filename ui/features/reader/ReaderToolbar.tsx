@@ -9,6 +9,7 @@ import {
   MoveVertical,
   NotebookPen,
   RectangleVertical,
+  Search,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -34,6 +35,8 @@ interface ReaderToolbarProps {
   onZoomMode: (mode: Exclude<ZoomMode, "custom">) => void;
   onToggleNotes?: () => void;
   onToggleFocus: () => void;
+  searchOpen: boolean;
+  onSearch: () => void;
 }
 
 const icon = "size-[18px]";
@@ -124,6 +127,9 @@ export function ReaderToolbar(props: ReaderToolbarProps) {
           )}
         </IconButton>
         <span className="mx-1 h-5 w-px bg-border" />
+        <IconButton label="Search (Ctrl+F)" active={props.searchOpen} onClick={props.onSearch}>
+          <Search className={icon} strokeWidth={1.75} />
+        </IconButton>
         {props.onToggleNotes && (
           <IconButton
             label="Notes (N)"

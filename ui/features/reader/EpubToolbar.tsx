@@ -9,6 +9,7 @@ import {
   Minimize,
   NotebookPen,
   ScrollText,
+  Search,
   TableOfContents,
 } from "lucide-react";
 import { IconButton } from "@/components/Button";
@@ -34,6 +35,8 @@ interface EpubToolbarProps {
   onFlow: (flow: EpubFlow) => void;
   onToggleToc: () => void;
   onToggleFocus: () => void;
+  searchOpen: boolean;
+  onSearch: () => void;
   onToggleNotes: () => void;
 }
 
@@ -114,6 +117,9 @@ export function EpubToolbar(props: EpubToolbarProps) {
           )}
         </IconButton>
         <span className="mx-1 h-5 w-px bg-border" />
+        <IconButton label="Search (Ctrl+F)" active={props.searchOpen} onClick={props.onSearch}>
+          <Search className={icon} strokeWidth={1.75} />
+        </IconButton>
         <IconButton
           label="Notes (N)"
           active={props.notesOpen}

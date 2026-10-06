@@ -6,6 +6,16 @@ All notable changes to Oikotheke are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-06
+
+### Added
+
+- Select and copy text in PDFs. Ctrl+A selects the text of the current page.
+- Search inside the open book (PDF and EPUB) with Ctrl+F: matches ignore case and accents, are
+  highlighted on the page, and Enter / Shift+Enter (or F3 / Shift+F3) step through them.
+- Ctrl+Q closes the app, saving your reading position first.
+- Esc on a book's page goes back to the library.
+
 ## [1.2.0] - 2026-10-03
 
 ### Added
@@ -54,7 +64,8 @@ The first release: a local-first library and reader for PDF and EPUB books.
 
 - The app icon now shows in window switchers (alt-tab) on Linux.
 
-[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/marcos-venicius/oikotheke/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/marcos-venicius/oikotheke/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/marcos-venicius/oikotheke/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/marcos-venicius/oikotheke/compare/v1.0.0...v1.1.0

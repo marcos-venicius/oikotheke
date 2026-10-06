@@ -10,6 +10,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 export type PDFDocumentProxy = pdfjs.PDFDocumentProxy;
 export type PDFPageProxy = pdfjs.PDFPageProxy;
 export type PDFLoadingTask = pdfjs.PDFDocumentLoadingTask;
+export type PageViewport = pdfjs.PageViewport;
+export type TextContent = Awaited<ReturnType<PDFPageProxy["getTextContent"]>>;
+export { normalizeUnicode, TextLayer } from "pdfjs-dist";
 
 /**
  * pdf.js fetches the file in chunks of this size, only where it needs data. Kept small because

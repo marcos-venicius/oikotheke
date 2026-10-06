@@ -44,6 +44,12 @@ declare module "foliate-js/view.js" {
     prev(): Promise<void>;
   }
 
+  /** What `View.search` yields: progress, the hits of a section, then "done". */
+  export type SearchResult =
+    | { progress: number }
+    | { label: string; subitems: { cfi: string; excerpt: unknown }[] }
+    | "done";
+
   export class View extends HTMLElement {
     /** Where each section starts, as a fraction of the whole book. */
     getSectionFractions(): number[];
@@ -60,6 +66,9 @@ declare module "foliate-js/view.js" {
     goRight(): Promise<void>;
     prev(): Promise<void>;
     next(): Promise<void>;
+    /** Searches the whole book (case- and accent-insensitive) and outlines the hits. */
+    search(options: { query: string }): AsyncGenerator<SearchResult>;
+    clearSearch(): void;
   }
 }
 

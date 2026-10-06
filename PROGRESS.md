@@ -5,10 +5,9 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 ## Status
 
-**Current phase:** Discover (1.2.0) complete — awaiting user feedback
+**Current phase:** text selection, search, Ctrl+Q, Esc (1.3.0) complete — awaiting user feedback
 **Next step:** user reinstalls (`scripts/install.sh`; migrates their real DB to schema 3) and checks import errors via the picker. Candidate follow-ups (not started):
 - Continuous-scroll reading mode (virtualized, reusing `PageRenderer`).
-- Text layer (select/copy text) — pdf.js `TextLayer`, only for rendered pages.
 - Sort/search on the shelf by title/author.
 - Undo for note deletion; export notes (Markdown).
 - AppImage/RPM bundles (need `rsvg2`/extra deps).
@@ -30,6 +29,16 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
+
+## Text selection, search, Ctrl+Q, Esc, 1.3.0 (2026-10-06)
+
+- User request: select text in PDFs, search, Ctrl+Q to close, Esc to leave the book page. Search scope decided with the user: inside the open book, PDF and EPUB (not the shelf).
+- **Text layer:** `PageView` builds a pdf.js `TextLayer` over the current page once its canvas is shown (`shownKey` = `page@zoom`), from `renderer.textContent(n)` (cached for the render window, dropped in `retain`) and `renderer.viewport(n, zoom)`. Needs `--total-scale-factor` on the layer (`viewport.scale`); `--scale-round-x/y` and the `.textLayer` rules are copied (flat CSS, Apache-2.0 note) into `ui/styles/pdfTextLayer.css` — pdf_viewer.css is not imported. `textSelection.ts` ports pdf.js `TextLayerBuilder`'s selection fix: without it, WebKitGTK extends a drag to the end of the page whenever the pointer is between spans (seen in the app). It also normalizes copied text (`normalizeUnicode`, no `\0`). Each text item with `str` makes exactly one span (`textDivs[i]` ↔ item `i`), which the highlight code relies on.
+- **Search:** generic `useSearch(query, scan, { isAhead, go })` + `SearchBar` (debounced 300 ms; Enter right after typing commits instead of stepping). PDF scan: `renderer.textRuns(n)` for every page in order, indexed by `pdfSearch.indexPage` (NFKD, no marks, lowercase, whitespace runs → one space, line end → space, items joined directly like pdf.js) and cached per session; highlights rerun `findMatches` on the shown page's runs and map them to `Range`s → `CSS.highlights` (`pdf-search`, `pdf-search-current`); the current hit is scrolled into view when zoomed. EPUB scan: foliate `view.search({ query })` (`Intl.Collator` base sensitivity = also case/accent-insensitive), `view.clearSearch()` when closed. React kept `type="search"` on the input across an HMR edit — remount to see attribute removals.
+- **Ctrl+Q:** `app/quit.ts`; `getCurrentWindow().close()` emits close-requested, so `useProgressSaver`'s flush runs, then Tauri destroys the window. Capability `core:window:allow-close` added. EPUB iframes: `onKey` checks `e.view !== window` so the shortcut isn't handled twice.
+- **Esc on the book page:** window listener, skipped by `ignoresShortcuts` while the remove dialog is open.
+- Verified: 56 vitest (8 new for `pdfSearch`), lint, typecheck, 74 Rust tests. Release build (CSP on): PDF text selection and search highlights work, EPUB search starts at the reading position. Dev app (scratch XDG, generated 8-page PDF via Chrome print-to-pdf and a 5-chapter generated EPUB, both with accents): drag-select + Ctrl+C → exact text in the clipboard; Ctrl+A → only the page; "zebra" 24 hits (3/page), "acao" 88 hits incl. "ação", Enter steps across pages, fit-width scrolls to the hit; EPUB "zebra" 45 hits outlined, Enter navigates; Esc closes search then leaves; Ctrl+Q inside the EPUB iframe and in the PDF reader closed the app with the position saved (CFI at 20%, page 4); book page Esc → library, with the remove dialog open Esc only closes it.
+- xt.py (scratch) needs the window raised/focused first (`XRaiseWindow` + `XSetInputFocus` via ctypes) or XTest clicks go elsewhere under XWayland. The user's installed app may be running: never send Ctrl+Q without focusing the dev window.
 
 ## Discover, 1.2.0 (2026-10-02)
 

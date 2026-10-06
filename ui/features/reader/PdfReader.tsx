@@ -11,11 +11,20 @@ import { PageScrubber } from "./PageScrubber";
 import { PageView } from "./PageView";
 import { ReaderToolbar } from "./ReaderToolbar";
 import type { PageRenderer } from "./pageRenderer";
+import { findMatches, foldText, indexPage, type PageText } from "./pdfSearch";
 import { clampPage, stepZoom } from "./readerMath";
+import { SearchBar } from "./SearchBar";
 import { useBookNotes } from "./useBookNotes";
 import { useFocusMode } from "./useFocusMode";
 import { useProgressSaver } from "./useProgressSaver";
 import { useReaderDocument } from "./useReaderDocument";
+import { useSearch } from "./useSearch";
+
+/** A search hit: the `index`-th match on `page`. */
+interface PdfHit {
+  page: number;
+  index: number;
+}
 
 /** PDF reading: pdf.js renders one page at a time (see `pageRenderer.ts`). */
 export function PdfReader({ book }: { book: Book }) {
@@ -41,10 +50,13 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
   const notes = useBookNotes(book.id);
   const notedPageList = useMemo(() => notedPages(notes.notes), [notes.notes]);
   const noteGroups = useMemo(() => groupNotes("pdf", notes.notes), [notes.notes]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocus, setSearchFocus] = useState(0);
   const chrome = useChromeVisibility();
   const { focus, setFocusMode } = useFocusMode();
-  // While annotating, keep the toolbar in place above the notes panel.
-  const chromeVisible = chrome.visible || notesOpen;
+  // While annotating or searching, keep the toolbar in place.
+  const chromeVisible = chrome.visible || notesOpen || searchOpen;
 
   const saver = useProgressSaver(book.id);
   useEffect(() => {
@@ -67,17 +79,51 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
     },
     [resolvedZoom],
   );
+  // Search: page texts are extracted once per session, folded for matching.
+  const [pageTexts] = useState(() => new Map<number, PageText>());
+  const scan = useCallback(
+    async function* (query: string): AsyncGenerator<PdfHit[]> {
+      const folded = foldText(query);
+      if (!folded) return;
+      for (let n = 1; n <= renderer.pageCount; n++) {
+        let text = pageTexts.get(n);
+        if (!text) {
+          text = indexPage(await renderer.textRuns(n).catch(() => []));
+          pageTexts.set(n, text);
+        }
+        yield findMatches(text, folded).map((_, index) => ({ page: n, index }));
+      }
+    },
+    [renderer, pageTexts],
+  );
+  const search = useSearch(searchOpen ? searchQuery : "", scan, {
+    isAhead: (hit) => hit.page >= page,
+    go: (hit) => goTo(hit.page),
+  });
+  const foldedQuery = useMemo(() => foldText(searchQuery), [searchQuery]);
+  const hit = search.currentHit;
+  const openSearch = useCallback(() => {
+    setSearchOpen(true);
+    setSearchFocus((n) => n + 1);
+  }, []);
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+  }, []);
+  const { next: nextHit, prev: prevHit } = search;
+
   const back = useCallback(() => navigate("/"), [navigate]);
   const toggleFocus = useCallback(() => setFocusMode(!focus), [focus, setFocusMode]);
-  // Esc leaves focus mode first, then the reader.
-  const escape = useCallback(
-    () => (focus ? setFocusMode(false) : back()),
-    [focus, setFocusMode, back],
-  );
+  // Esc closes the search, then leaves focus mode, then the reader.
+  const escape = useCallback(() => {
+    if (searchOpen) closeSearch();
+    else if (focus) setFocusMode(false);
+    else back();
+  }, [searchOpen, closeSearch, focus, setFocusMode, back]);
 
-  const handlers = useRef({ flip, goTo, zoom, escape, toggleFocus });
+  const handlers = useRef({ flip, goTo, zoom, escape, toggleFocus, openSearch, nextHit, prevHit });
   useLayoutEffect(() => {
-    handlers.current = { flip, goTo, zoom, escape, toggleFocus };
+    handlers.current = { flip, goTo, zoom, escape, toggleFocus, openSearch, nextHit, prevHit };
   });
 
   useEffect(() => {
@@ -122,8 +168,8 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
           break;
         case "f":
         case "F":
-          if (withCtrl) return;
-          h.toggleFocus();
+          if (withCtrl) h.openSearch();
+          else h.toggleFocus();
           break;
         case "F11":
           h.toggleFocus();
@@ -136,6 +182,18 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
         case "Escape":
           h.escape();
           break;
+        case "F3":
+          if (e.shiftKey) h.prevHit();
+          else h.nextHit();
+          break;
+        case "a":
+        case "A": {
+          if (!withCtrl) return;
+          // Select the page's text rather than the whole app.
+          const layer = document.querySelector(".textLayer");
+          if (layer) window.getSelection()?.selectAllChildren(layer);
+          break;
+        }
         default:
           return;
       }
@@ -172,6 +230,8 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
         notesOpen={notesOpen}
         pageHasNotes={notedPageList.includes(page)}
         onToggleNotes={() => setNotesOpen((open) => !open)}
+        searchOpen={searchOpen}
+        onSearch={() => (searchOpen ? closeSearch() : openSearch())}
       />
       <div className="flex h-full">
         <main className="relative min-w-0 flex-1" onPointerEnter={chrome.poke}>
@@ -182,7 +242,22 @@ function Reader({ book, renderer }: { book: Book; renderer: PageRenderer }) {
             customZoom={customZoom}
             onZoomResolved={setResolvedZoom}
             onFlip={flip}
+            search={
+              searchOpen && foldedQuery
+                ? { query: foldedQuery, current: hit?.page === page ? hit.index : null }
+                : null
+            }
           />
+          {searchOpen && (
+            <SearchBar
+              status={search.status}
+              focusSignal={searchFocus}
+              onQuery={setSearchQuery}
+              onNext={nextHit}
+              onPrev={prevHit}
+              onClose={closeSearch}
+            />
+          )}
           <PageScrubber
             page={page}
             pageCount={pageCount}

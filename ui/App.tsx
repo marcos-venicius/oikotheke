@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
+import { isQuitShortcut, quit } from "./app/quit";
 import { ThemeProvider } from "./app/theme";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/toast";
@@ -9,6 +11,15 @@ import { ReaderPage } from "./features/reader/ReaderPage";
 
 function AppRoutes() {
   const navigate = useNavigate();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isQuitShortcut(e)) return;
+      e.preventDefault();
+      quit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   return (
     <ErrorBoundary onReset={() => navigate("/")}>
       <Routes>

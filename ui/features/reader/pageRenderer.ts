@@ -1,4 +1,10 @@
-import type { PDFDocumentProxy, PDFPageProxy } from "@/services/pdfService";
+import type {
+  PageViewport,
+  PDFDocumentProxy,
+  PDFPageProxy,
+  TextContent,
+} from "@/services/pdfService";
+import type { TextRun } from "./pdfSearch";
 import { CSS_UNITS, type Size } from "./readerMath";
 
 /** Canvas pixel budget per page; very high zoom levels drop device-pixel density instead. */
@@ -15,6 +21,13 @@ interface Job {
   cancel: () => void;
 }
 
+/** The text items of a page, one per span of its text layer (pdf.js skips the others). */
+export function textRuns(content: TextContent): TextRun[] {
+  return content.items.flatMap((item) =>
+    "str" in item ? [{ str: item.str, hasEOL: item.hasEOL }] : [],
+  );
+}
+
 function keyOf(page: number, zoom: number): string {
   return `${page}@${zoom.toFixed(4)}`;
 }
@@ -28,6 +41,7 @@ export class PageRenderer {
   private readonly pages = new Map<number, Promise<PDFPageProxy>>();
   private readonly canvases = new Map<string, Entry>();
   private readonly jobs = new Map<string, Job>();
+  private readonly texts = new Map<number, Promise<TextContent>>();
   private destroyed = false;
 
   constructor(
@@ -53,6 +67,28 @@ export class PageRenderer {
   async pageSize(n: number): Promise<Size> {
     const viewport = (await this.page(n)).getViewport({ scale: 1 });
     return { width: viewport.width, height: viewport.height };
+  }
+
+  /** The viewport `render` uses for page `n` at `zoom`. */
+  async viewport(n: number, zoom: number): Promise<PageViewport> {
+    return (await this.page(n)).getViewport({ scale: zoom * CSS_UNITS });
+  }
+
+  /** Text of a page in the window (for the text layer), kept until the page leaves it. */
+  textContent(n: number): Promise<TextContent> {
+    let text = this.texts.get(n);
+    if (!text) {
+      text = this.page(n).then((page) => page.getTextContent());
+      this.texts.set(n, text);
+      text.catch(() => this.texts.delete(n));
+    }
+    return text;
+  }
+
+  /** Text runs of any page, for searching; nothing is kept. */
+  async textRuns(n: number): Promise<TextRun[]> {
+    const page = await (this.pages.get(n) ?? this.doc.getPage(n));
+    return textRuns(await page.getTextContent());
   }
 
   /** Returns a canvas for page `n` at `zoom` (1 = 100%), reusing cached renders. */
@@ -132,6 +168,9 @@ export class PageRenderer {
         this.free(entry.canvas);
         this.canvases.delete(key);
       }
+    }
+    for (const n of this.texts.keys()) {
+      if (!keepPages.has(n)) this.texts.delete(n);
     }
     for (const [n, page] of this.pages) {
       if (!keepPages.has(n)) {

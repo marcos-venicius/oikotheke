@@ -1,8 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ZoomMode } from "@/lib/types";
 import { cn } from "@/lib/cn";
-import type { PageRenderer } from "./pageRenderer";
+import { TextLayer } from "@/services/pdfService";
+import { textRuns, type PageRenderer } from "./pageRenderer";
+import { findMatches, indexPage, type TextMatch } from "./pdfSearch";
 import { fitZoom, renderWindow, type Size } from "./readerMath";
+import { bindTextSelection } from "./textSelection";
 
 /** Space around the page. Fit height uses none vertically: the page spans the full window height. */
 const PADDING = 32;
@@ -17,6 +20,15 @@ interface PageViewProps {
   /** Reports the zoom actually used (fit modes resolve to a number). */
   onZoomResolved: (zoom: number) => void;
   onFlip: (direction: 1 | -1) => void;
+  /** Search hits to highlight: a folded query and which of the page's matches is current. */
+  search?: { query: string; current: number | null } | null;
+}
+
+/** The text layer shown over the current page. */
+interface ShownText {
+  key: string;
+  spans: HTMLElement[];
+  runs: ReturnType<typeof textRuns>;
 }
 
 export function PageView({
@@ -26,6 +38,7 @@ export function PageView({
   customZoom,
   onZoomResolved,
   onFlip,
+  search,
 }: PageViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
@@ -42,6 +55,8 @@ export function PageView({
   const [loading, setLoading] = useState(false);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const flipState = useRef({ delta: 0, last: 0, arriveAtBottom: false });
+  const [shownKey, setShownKey] = useState<string | null>(null);
+  const [text, setText] = useState<ShownText | null>(null);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -95,6 +110,7 @@ export function PageView({
         clearTimeout(spinner);
         setLoading(false);
         slotRef.current?.replaceChildren(canvas);
+        setShownKey(`${page}@${zoom}`);
         const scroller = scrollRef.current;
         if (scroller) {
           scroller.scrollTop = flipState.current.arriveAtBottom ? scroller.scrollHeight : 0;
@@ -117,6 +133,69 @@ export function PageView({
       clearTimeout(spinner);
     };
   }, [renderer, page, zoom]);
+
+  // Invisible text over the page once its canvas is shown, so text can be selected and copied.
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (zoom === null || shownKey !== renderKey || !slot) return;
+    let active = true;
+    let layer: TextLayer | null = null;
+    let unbind = () => {};
+    const div = document.createElement("div");
+    div.className = "textLayer";
+    Promise.all([renderer.textContent(page), renderer.viewport(page, zoom)])
+      .then(async ([content, viewport]) => {
+        if (!active) return;
+        div.style.setProperty("--total-scale-factor", String(viewport.scale));
+        layer = new TextLayer({ textContentSource: content, container: div, viewport });
+        await layer.render();
+        if (!active) return;
+        const end = document.createElement("div");
+        end.className = "endOfContent";
+        div.append(end);
+        slot.append(div);
+        unbind = bindTextSelection(div, end);
+        setText({ key: renderKey, spans: layer.textDivs, runs: textRuns(content) });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+      layer?.cancel();
+      unbind();
+      div.remove();
+    };
+  }, [renderer, page, zoom, renderKey, shownKey]);
+
+  // Highlight search hits on the page and bring the current one into view.
+  const shownText = text?.key === renderKey ? text : null;
+  const query = search?.query ?? "";
+  const current = search?.current ?? null;
+  useEffect(() => {
+    if (!shownText || !query || typeof CSS === "undefined" || !("highlights" in CSS)) return;
+    const matches = findMatches(indexPage(shownText.runs), query);
+    const ranges = matches.map((match) => toRange(shownText.spans, match));
+    const others = ranges.filter((_, i) => i !== current);
+    const active = current !== null ? ranges[current] : undefined;
+    CSS.highlights.set("pdf-search", new Highlight(...others));
+    if (active) {
+      CSS.highlights.set("pdf-search-current", new Highlight(active));
+      const box = active.getBoundingClientRect();
+      const scroller = scrollRef.current;
+      if (scroller) {
+        const view = scroller.getBoundingClientRect();
+        if (box.top < view.top || box.bottom > view.bottom) {
+          scroller.scrollTop += box.top - view.top - view.height / 3;
+        }
+        if (box.left < view.left || box.right > view.right) {
+          scroller.scrollLeft += box.left - view.left - view.width / 3;
+        }
+      }
+    }
+    return () => {
+      CSS.highlights.delete("pdf-search");
+      CSS.highlights.delete("pdf-search-current");
+    };
+  }, [shownText, query, current]);
 
   // Book-like wheel navigation: flip when the page can't scroll further that way.
   const onWheel = (e: React.WheelEvent) => {
@@ -155,7 +234,7 @@ export function PageView({
         <div
           ref={slotRef}
           className={cn(
-            "bg-white shadow-lift transition-opacity duration-150 [&>canvas]:block",
+            "relative bg-white shadow-lift transition-opacity duration-150 [&>canvas]:block",
             loading && "opacity-60",
           )}
         />
@@ -172,4 +251,17 @@ export function PageView({
       )}
     </div>
   );
+}
+
+function toRange(spans: HTMLElement[], { start, end }: TextMatch): Range {
+  const range = document.createRange();
+  range.setStart(...textPosition(spans[start.item], start.offset));
+  range.setEnd(...textPosition(spans[end.item], end.offset));
+  return range;
+}
+
+/** A text span holds a single text node (none when its text is empty). */
+function textPosition(span: HTMLElement, offset: number): [Node, number] {
+  const node = span.firstChild;
+  return node ? [node, Math.min(offset, node.textContent?.length ?? 0)] : [span, 0];
 }

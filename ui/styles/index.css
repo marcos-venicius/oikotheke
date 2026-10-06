@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
+@import "./pdfTextLayer.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 

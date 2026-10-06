@@ -16,9 +16,10 @@ The name comes from Greek *oîkos* (home) + *thḗkē* (case, repository): the h
   sources and import in one click.
 - **Your own copy.** Every imported book is copied into the app's storage, so moving or deleting
   the original never breaks your library.
-- **Comfortable reading.** PDFs page by page with zoom and fit modes; EPUBs as book-like pages or
-  a continuous scroll, with contents, adjustable font size, and light or dark themes. Focus mode
-  hides everything but the text.
+- **Comfortable reading.** PDFs page by page with zoom and fit modes, and text you can select
+  and copy; EPUBs as book-like pages or a continuous scroll, with contents, adjustable font size,
+  and light or dark themes. Search any book with Ctrl+F. Focus mode hides everything but the
+  text.
 - **Picks up where you left off.** Your position is saved as you read and restored when you
   reopen a book, even after restarting the app.
 - **Notes on any page.** Write notes while reading, see which pages have them, jump between

@@ -12,6 +12,7 @@ import { libraryService } from "@/services/libraryService";
 import { notesService } from "@/services/notesService";
 import { BookCover } from "@/features/library/BookCover";
 import { RemoveBookDialog, type RemoveMode } from "@/features/library/RemoveBookDialog";
+import { ignoresShortcuts } from "@/features/reader/readerChrome";
 import { groupNotes } from "@/lib/notes";
 
 type State =
@@ -40,6 +41,17 @@ export function BookDetailsPage() {
 
   const current = state.id === id ? state : { status: "loading" as const };
 
+  // Esc goes back to the library, like the back button. An open dialog handles its own Esc.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || ignoresShortcuts(e.target)) return;
+      e.preventDefault();
+      navigate("/");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate]);
+
   const confirmRemoval = async (book: Book, mode: RemoveMode) => {
     setRemoving(false);
     try {
@@ -62,7 +74,7 @@ export function BookDetailsPage() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-14 shrink-0 items-center gap-2 px-4">
-        <IconButton label="Back to library" onClick={() => navigate("/")}>
+        <IconButton label="Back to library (Esc)" onClick={() => navigate("/")}>
           <ArrowLeft className="size-[18px]" strokeWidth={1.75} />
         </IconButton>
         <div className="ml-auto">

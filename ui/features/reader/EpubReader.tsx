@@ -10,6 +10,7 @@ import {
   rangeStart,
   sortNotes,
 } from "@/lib/notes";
+import { isQuitShortcut, quit } from "@/app/quit";
 import { useTheme } from "@/app/theme";
 import { toast } from "@/components/toast";
 import { openEpub } from "@/services/epubService";
@@ -22,11 +23,13 @@ import { NotesPanel, type NotesJump } from "./NotesPanel";
 import { OpenLinkDialog } from "./OpenLinkDialog";
 import { ctrlWheelZoom, ignoresShortcuts, useChromeVisibility } from "./readerChrome";
 import { ReaderError, ReaderLoading } from "./ReaderStatus";
+import { SearchBar } from "./SearchBar";
 import { TocPanel } from "./TocPanel";
 import { useBookNotes } from "./useBookNotes";
 import { useEpubPrefs } from "./useEpubPrefs";
 import { useFocusMode } from "./useFocusMode";
 import { useProgressSaver } from "./useProgressSaver";
+import { useSearch } from "./useSearch";
 
 /** Readable line length and page gutters for reflowable text. */
 const LAYOUT = { "max-inline-size": "720px", gap: "7%", margin: "56px" };
@@ -47,6 +50,9 @@ export function EpubReader({ book }: { book: Book }) {
   const [position, setPosition] = useState<Position>({ fraction: book.progress });
   const [tocOpen, setTocOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocus, setSearchFocus] = useState(0);
   // Callers may open the reader at a location (e.g. a note in book details).
   const requested = (useLocation().state as { location?: string } | null)?.location;
   const [startAt] = useState(() => requested ?? book.location);
@@ -76,14 +82,44 @@ export function EpubReader({ book }: { book: Book }) {
     (dir: 1 | -1) => prefs && update({ fontSize: stepFontSize(prefs.fontSize, dir) }),
     [prefs, update],
   );
+  // Search: foliate-js scans the chapters and outlines the hits; positions are CFIs.
+  const scan = useCallback(
+    async function* (query: string): AsyncGenerator<string[]> {
+      if (!view) return;
+      for await (const result of view.search({ query })) {
+        if (result === "done") return;
+        if ("subitems" in result) yield result.subitems.map((item) => item.cfi);
+      }
+    },
+    [view],
+  );
+  const search = useSearch(searchOpen ? searchQuery : "", view ? scan : null, {
+    isAhead: (cfi) =>
+      !position.visible || compareLocations("epub", cfi, rangeStart(position.visible)) >= 0,
+    go: (cfi) => void view?.goTo(cfi),
+  });
+  useEffect(() => {
+    if (!searchOpen || !searchQuery) view?.clearSearch();
+  }, [view, searchOpen, searchQuery]);
+  const openSearch = useCallback(() => {
+    setSearchOpen(true);
+    setSearchFocus((n) => n + 1);
+  }, []);
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+  }, []);
+  const { next: nextHit, prev: prevHit } = search;
+
   const back = useCallback(() => navigate("/"), [navigate]);
   const toggleFocus = useCallback(() => setFocusMode(!focus), [focus, setFocusMode]);
-  // Esc closes the contents, then leaves focus mode, then the reader.
+  // Esc closes the search or the contents, then leaves focus mode, then the reader.
   const escape = useCallback(() => {
-    if (tocOpen) setTocOpen(false);
+    if (searchOpen) closeSearch();
+    else if (tocOpen) setTocOpen(false);
     else if (focus) setFocusMode(false);
     else back();
-  }, [tocOpen, focus, setFocusMode, back]);
+  }, [searchOpen, closeSearch, tocOpen, focus, setFocusMode, back]);
 
   // Event listeners are attached once (including inside the book's iframes) and read the latest
   // handlers from this ref.
@@ -94,15 +130,39 @@ export function EpubReader({ book }: { book: Book }) {
     escape,
     toggleFocus,
     poke: chrome.poke,
+    openSearch,
+    nextHit,
+    prevHit,
   });
   useLayoutEffect(() => {
-    handlers.current = { onRelocate, flip, changeFontSize, escape, toggleFocus, poke: chrome.poke };
+    handlers.current = {
+      onRelocate,
+      flip,
+      changeFontSize,
+      escape,
+      toggleFocus,
+      poke: chrome.poke,
+      openSearch,
+      nextHit,
+      prevHit,
+    };
   });
 
   const onKey = useCallback((e: KeyboardEvent) => {
+    // Keys pressed inside the book's iframes never reach the app's own Ctrl+Q listener.
+    if (isQuitShortcut(e) && e.view !== window) {
+      e.preventDefault();
+      quit();
+      return;
+    }
     if (ignoresShortcuts(e.target) || e.altKey || e.metaKey) return;
     const h = handlers.current;
-    // Ctrl only combines with the font size keys (Ctrl +/-, like zooming a page).
+    if (e.ctrlKey && (e.key === "f" || e.key === "F")) {
+      e.preventDefault();
+      h.openSearch();
+      return;
+    }
+    // Otherwise Ctrl only combines with the font size keys (Ctrl +/-, like zooming a page).
     if (e.ctrlKey && !["+", "=", "-"].includes(e.key)) return;
     switch (e.key) {
       case "ArrowRight":
@@ -135,6 +195,10 @@ export function EpubReader({ book }: { book: Book }) {
         break;
       case "Escape":
         h.escape();
+        break;
+      case "F3":
+        if (e.shiftKey) h.prevHit();
+        else h.nextHit();
         break;
       default:
         return;
@@ -269,7 +333,7 @@ export function EpubReader({ book }: { book: Book }) {
   if (error) return <ReaderError message={error} />;
 
   const toc = view?.book.toc ?? [];
-  const chromeVisible = chrome.visible || tocOpen || notesOpen;
+  const chromeVisible = chrome.visible || tocOpen || notesOpen || searchOpen;
   return (
     <div className="relative h-full overflow-hidden bg-bg" onPointerMove={chrome.poke}>
       {prefs && (
@@ -291,6 +355,8 @@ export function EpubReader({ book }: { book: Book }) {
           notesOpen={notesOpen}
           hasNotesHere={hereNotes.length > 0}
           onToggleNotes={() => setNotesOpen((open) => !open)}
+          searchOpen={searchOpen}
+          onSearch={() => (searchOpen ? closeSearch() : openSearch())}
         />
       )}
       <div className="flex h-full">
@@ -306,6 +372,16 @@ export function EpubReader({ book }: { book: Book }) {
         )}
         <main className="relative min-w-0 flex-1 pt-14 pb-12" onPointerEnter={chrome.poke}>
           <div ref={host} className="h-full" />
+          {searchOpen && (
+            <SearchBar
+              status={search.status}
+              focusSignal={searchFocus}
+              onQuery={setSearchQuery}
+              onNext={nextHit}
+              onPrev={prevHit}
+              onClose={closeSearch}
+            />
+          )}
           {!view && (
             <div className="absolute inset-0">
               <ReaderLoading />
