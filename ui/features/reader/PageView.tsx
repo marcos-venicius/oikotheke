@@ -197,34 +197,54 @@ export function PageView({
     };
   }, [shownText, query, current]);
 
-  // Book-like wheel navigation: flip when the page can't scroll further that way.
-  const onWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.deltaY === 0) return;
-    const el = e.currentTarget;
-    const dir = e.deltaY > 0 ? 1 : -1;
-    const atEdge =
-      dir > 0 ? el.scrollTop + el.clientHeight >= el.scrollHeight - 1 : el.scrollTop <= 0;
-    const state = flipState.current;
-    if (!atEdge) {
-      state.delta = 0;
-      return;
-    }
-    state.delta += e.deltaY;
-    const now = performance.now();
-    if (Math.abs(state.delta) >= WHEEL_THRESHOLD && now - state.last > FLIP_COOLDOWN) {
-      state.delta = 0;
-      state.last = now;
-      state.arriveAtBottom = dir < 0;
-      onFlip(dir);
-    }
-  };
+  // Shift + wheel flips the page; a plain wheel only scrolls. Native listener: React's is passive.
+  const onFlipRef = useRef(onFlip);
+  useEffect(() => {
+    onFlipRef.current = onFlip;
+  });
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.shiftKey || e.ctrlKey) return;
+      e.preventDefault();
+      // Some engines turn a shift + wheel into horizontal scrolling (deltaX).
+      const delta = e.deltaY || e.deltaX;
+      if (delta === 0) return;
+      const state = flipState.current;
+      state.delta += delta;
+      const now = performance.now();
+      if (Math.abs(state.delta) >= WHEEL_THRESHOLD && now - state.last > FLIP_COOLDOWN) {
+        const dir = state.delta > 0 ? 1 : -1;
+        state.delta = 0;
+        state.last = now;
+        state.arriveAtBottom = false;
+        onFlipRef.current(dir);
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Keep the page focused so ↑/↓ scroll it without clicking: on mount, after a page change and
+  // when the window regains focus (unless the user is typing somewhere).
+  useEffect(() => {
+    const focusPage = () => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+      scrollRef.current?.focus({ preventScroll: true });
+    };
+    focusPage();
+    window.addEventListener("focus", focusPage);
+    return () => window.removeEventListener("focus", focusPage);
+  }, [page, shownKey]);
 
   return (
     <div
       ref={scrollRef}
-      onWheel={onWheel}
+      tabIndex={-1}
       className={cn(
-        "scrollbar-thin relative h-full overflow-auto bg-reader",
+        "scrollbar-thin relative h-full overflow-auto bg-reader outline-none",
         // Fitted pages never need vertical scrolling; this also absorbs sub-pixel rounding.
         (zoomMode === "fit-page" || zoomMode === "fit-height") && "overflow-y-hidden",
       )}

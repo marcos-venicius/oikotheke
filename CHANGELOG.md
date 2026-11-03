@@ -6,6 +6,14 @@ All notable changes to Oikotheke are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- In PDFs, the mouse wheel only scrolls the page; hold Shift and scroll to change page.
+
+### Fixed
+
+- ↑/↓ scroll the PDF page right after changing page or returning to the app, without clicking first.
+
 ## [1.3.0] - 2026-10-06
 
 ### Added

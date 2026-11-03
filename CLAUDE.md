@@ -245,7 +245,8 @@ Reading comfort comes first: keep visible controls to a minimum.
 The PDF reader:
 
 - Shows one page at a time, sized to the window.
-- Navigates forward/back (buttons, keyboard, page scrubber).
+- Navigates forward/back (buttons, keyboard, page scrubber, Shift + mouse wheel; a plain wheel
+  only scrolls the page). The page keeps keyboard focus so ↑/↓ scroll it.
 - Jumps directly to a page.
 - Shows the current page and total page count.
 - Supports zoom and fit modes: fit page, fit width, fit height, custom zoom. Zoom in/out also
