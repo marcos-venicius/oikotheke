@@ -158,6 +158,15 @@ pub fn set_removed(conn: &Connection, id: &str, removed: bool) -> AppResult<()> 
     ensure_changed(changed, id)
 }
 
+/// Renames a book. The caller cleans and validates the title (`services::library::rename`).
+pub fn set_title(conn: &Connection, id: &str, title: &str) -> AppResult<()> {
+    let changed = conn.execute(
+        "UPDATE books SET title = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, title, now_ms()],
+    )?;
+    ensure_changed(changed, id)
+}
+
 /// Stores a reading position. The caller validates it (`services::progress`).
 pub fn update_progress(conn: &Connection, id: &str, progress: &ReadingProgress) -> AppResult<()> {
     let changed = conn.execute(

@@ -244,6 +244,25 @@ pub fn set_removed(db: &Database, id: &str, removed: bool) -> AppResult<Book> {
     books::get(&conn, id)
 }
 
+/// Longest title a user may give a book, in characters.
+pub const MAX_TITLE_CHARS: usize = 300;
+
+/// Gives a book a new title, cleaned like imported ones. The file on disk keeps its name.
+pub fn rename(db: &Database, id: &str, title: &str) -> AppResult<Book> {
+    let title = clean_text(title);
+    if title.is_empty() {
+        return Err(AppError::Invalid("the title can't be empty".into()));
+    }
+    if title.chars().count() > MAX_TITLE_CHARS {
+        return Err(AppError::Invalid(format!(
+            "the title can't be longer than {MAX_TITLE_CHARS} characters"
+        )));
+    }
+    let conn = db.conn();
+    books::set_title(&conn, id, &title)?;
+    books::get(&conn, id)
+}
+
 /// Deletes the book, its notes and its files. The directory is first moved to a trash
 /// location so a crash never leaves a row pointing at a half-deleted directory.
 pub fn delete_permanently(db: &Database, storage: &Storage, id: &str) -> AppResult<()> {
@@ -595,6 +614,39 @@ pub(crate) mod tests {
         abort_import(&db, &storage, &book.id).unwrap();
         assert!(storage.scan().unwrap().is_empty());
         assert!(books::list_all(&db.conn()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rename_cleans_and_validates_the_title() {
+        let (dir, db, storage) = setup();
+        let book =
+            copy_into_library(&db, &storage, &write_pdf(dir.path(), "a.pdf"), |_| {}).unwrap();
+        let renamed = rename(&db, &book.id, "  My\tnew \u{0}title\n").unwrap();
+        assert_eq!(renamed.title, "My new title");
+        assert!(storage.resolve(&book.file_path).is_file());
+
+        assert!(matches!(
+            rename(&db, &book.id, " \n "),
+            Err(AppError::Invalid(_))
+        ));
+        let long = "é".repeat(MAX_TITLE_CHARS + 1);
+        assert!(matches!(
+            rename(&db, &book.id, &long),
+            Err(AppError::Invalid(_))
+        ));
+        assert!(rename(&db, &book.id, &long[..MAX_TITLE_CHARS * 2]).is_ok());
+        assert!(matches!(
+            rename(&db, "nope", "x"),
+            Err(AppError::NotFound(_))
+        ));
+        assert_eq!(
+            books::get(&db.conn(), &book.id)
+                .unwrap()
+                .title
+                .chars()
+                .count(),
+            MAX_TITLE_CHARS
+        );
     }
 
     #[test]

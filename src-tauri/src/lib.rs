@@ -82,6 +82,7 @@ pub fn run() {
             commands::library::read_epub_cover,
             commands::library::finalize_import,
             commands::library::abort_import,
+            commands::library::rename_book,
             commands::library::remove_book,
             commands::library::restore_book,
             commands::library::delete_book,

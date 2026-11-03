@@ -88,6 +88,11 @@ pub fn abort_import(state: State<AppState>, id: String) -> AppResult<()> {
 }
 
 #[tauri::command]
+pub fn rename_book(state: State<AppState>, id: String, title: String) -> AppResult<Book> {
+    library::rename(&state.db, &id, &title)
+}
+
+#[tauri::command]
 pub fn remove_book(state: State<AppState>, id: String) -> AppResult<Book> {
     library::set_removed(&state.db, &id, true)
 }

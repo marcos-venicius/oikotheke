@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, BookOpen, CircleAlert, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, CircleAlert, Pencil, Trash2, X } from "lucide-react";
 import type { Book, CatalogEntry, Note } from "@/lib/types";
 import { formatBytes, formatDate, formatRelative, plural } from "@/lib/format";
 import { describePosition, formatLabel } from "@/lib/location";
@@ -52,6 +52,17 @@ export function BookDetailsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate]);
 
+  const rename = async (book: Book, title: string) => {
+    try {
+      const renamed = await libraryService.renameBook(book.id, title);
+      setState((s) => (s.status === "ready" && s.id === renamed.id ? { ...s, book: renamed } : s));
+      return true;
+    } catch (error) {
+      toast("Couldn't rename the book", { tone: "error", description: describeError(error) });
+      return false;
+    }
+  };
+
   const confirmRemoval = async (book: Book, mode: RemoveMode) => {
     setRemoving(false);
     try {
@@ -96,6 +107,7 @@ export function BookDetailsPage() {
               onRead={(location) =>
                 navigate(`/read/${current.book.id}`, location ? { state: { location } } : undefined)
               }
+              onRename={(title) => rename(current.book, title)}
               onRemove={() => setRemoving(true)}
             />
             <RemoveBookDialog
@@ -116,6 +128,7 @@ function Details({
   notes,
   origin,
   onRead,
+  onRename,
   onRemove,
 }: {
   book: Book;
@@ -123,6 +136,8 @@ function Details({
   /** The Discover entry the book was downloaded from. */
   origin?: CatalogEntry;
   onRead: (location?: string) => void;
+  /** Resolves to whether the new title was saved. */
+  onRename: (title: string) => Promise<boolean>;
   onRemove: () => void;
 }) {
   const progress = book.progress;
@@ -150,7 +165,7 @@ function Details({
         </div>
 
         <div className="min-w-0 flex-1 pt-1">
-          <h1 className="text-2xl leading-tight font-semibold tracking-tight">{book.title}</h1>
+          <EditableTitle title={book.title} onRename={onRename} />
           {book.author && <p className="mt-1.5 text-muted">{book.author}</p>}
 
           {book.status === "missing" && (
@@ -228,5 +243,86 @@ function Details({
         )}
       </section>
     </div>
+  );
+}
+
+/** Matches the backend's limit (`MAX_TITLE_CHARS`). */
+const MAX_TITLE_LENGTH = 300;
+
+/** The book title, which turns into a text field to rename the book. */
+function EditableTitle({
+  title,
+  onRename,
+}: {
+  title: string;
+  onRename: (title: string) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  if (draft === null) {
+    return (
+      <div className="group/title flex items-start gap-2">
+        <h1 className="min-w-0 text-2xl leading-tight font-semibold tracking-tight break-words">
+          {title}
+        </h1>
+        <IconButton
+          label="Rename"
+          onClick={() => setDraft(title)}
+          className="mt-0.5 shrink-0 opacity-60 group-hover/title:opacity-100 focus-visible:opacity-100"
+        >
+          <Pencil className="size-4" />
+        </IconButton>
+      </div>
+    );
+  }
+
+  const trimmed = draft.trim();
+  const save = async () => {
+    if (saving) return;
+    if (trimmed === "" || trimmed === title) {
+      setDraft(null);
+      return;
+    }
+    setSaving(true);
+    const saved = await onRename(trimmed);
+    setSaving(false);
+    if (saved) setDraft(null);
+    else inputRef.current?.focus();
+  };
+
+  return (
+    <form
+      className="flex items-center gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <input
+        ref={inputRef}
+        value={draft}
+        maxLength={MAX_TITLE_LENGTH}
+        disabled={saving}
+        aria-label="Book title"
+        autoFocus
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            setDraft(null);
+          }
+        }}
+        className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-2xl leading-tight font-semibold tracking-tight outline-none focus:border-accent"
+      />
+      <IconButton label="Save title" type="submit" disabled={saving || trimmed === ""}>
+        <Check className="size-4" />
+      </IconButton>
+      <IconButton label="Cancel" type="button" onClick={() => setDraft(null)} disabled={saving}>
+        <X className="size-4" />
+      </IconButton>
+    </form>
   );
 }

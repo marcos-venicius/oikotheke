@@ -35,6 +35,8 @@ export const libraryService = {
     call<Book>("finalize_import", { id, metadata }),
   abortImport: (id: string) => call<void>("abort_import", { id }),
 
+  /** Changes the title shown everywhere; the stored file keeps its name. */
+  renameBook: (id: string, title: string) => call<Book>("rename_book", { id, title }),
   removeBook: (id: string) => call<Book>("remove_book", { id }),
   restoreBook: (id: string) => call<Book>("restore_book", { id }),
   deleteBook: (id: string) => call<void>("delete_book", { id }),

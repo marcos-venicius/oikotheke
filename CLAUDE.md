@@ -124,7 +124,7 @@ The layout must feel like a library, not a plain file list.
 
 Books are ordered by **most recent activity** (`updated_at`), then by import date: opening a
 book (the reader saves its position right away), reading, writing/editing/deleting notes,
-importing and restoring all count. The book details page shows the same value as "Last
+importing, restoring and renaming all count. The book details page shows the same value as "Last
 activity".
 
 ### Import
@@ -182,6 +182,14 @@ URL (never sent to the UI), source, license and description.
 - Only books that may be downloaded freely from an official source qualify. Check the license on
   the official page before adding one; run the ignored test
   `cargo test catalog_downloads -- --ignored` after changing URLs (it downloads all of them).
+
+### Renaming
+
+The book details page lets the user rename a book (pencil next to the title; Enter saves, Esc
+cancels). Only the title shown in the app changes: the managed file keeps its name
+(`book.pdf | book.epub`) and the embedded metadata is untouched. The title is cleaned like
+imported ones (control characters, whitespace), may not be empty and has at most 300
+characters. Catalog books can be renamed too.
 
 ### Removal
 

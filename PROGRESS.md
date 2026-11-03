@@ -30,6 +30,13 @@ Product spec and rules: `CLAUDE.md` (keep it updated when a change affects it). 
 - Rust: 32 tests (repositories, import success/failure incl. permission denied, abort, soft/permanent delete, reconcile, range parsing, error mapping). Frontend: 16 vitest tests (reader math, noted pages, debounce, format, title heuristics).
 - Manual, in the real app: import (incl. 600 MB file, non-PDF rejected, truncated PDF rolled back), covers, reader nav/zoom/fit, progress restored after restart, notes create/navigate/indicators, details page, light/dark, soft remove + permanent delete (files freed), release build with CSP, crash leftovers cleaned on startup.
 
+## Cover context menu and rename (2026-11-03)
+
+- User request: right-click on a cover opens the options popup; rename a book on the details page. "Rename" = the title shown in the app; the managed file name (`book.pdf`) never changes.
+- `components/Menu.tsx`: shared `useDismiss` (outside pointer down, Esc in the capture phase with `stopImmediatePropagation` so the page's Esc doesn't also run, window blur/resize) and `MenuItems`; new `ContextMenu` (`at` = pointer point), portalled to `body` because the hovered cover has a `transform`, which would offset `position: fixed`; flipped/shifted inside the window after measuring. `BookCard` uses it on the cover's `onContextMenu` (always `preventDefault`, so the webview's own menu never shows). The cover button is `aria-disabled` instead of `disabled` when it can't open the book: disabled buttons get no `contextmenu` event, and removed/missing books still need the menu.
+- Rename: `books::set_title` (bumps `updated_at`), `services::library::rename` (`clean_text`, non-empty, ≤ `MAX_TITLE_CHARS` = 300 chars), command `rename_book`, `libraryService.renameBook`. UI: `EditableTitle` in `BookDetailsPage` (pencil → input with `maxLength` 300, Enter/✓ saves, Esc/✕ cancels; on error a toast and the field stays open).
+- Verified: 75 Rust tests (new `rename_cleans_and_validates_the_title`), 56 vitest, lint, typecheck, clippy.
+
 ## Text selection, search, Ctrl+Q, Esc, 1.3.0 (2026-10-06)
 
 - User request: select text in PDFs, search, Ctrl+Q to close, Esc to leave the book page. Search scope decided with the user: inside the open book, PDF and EPUB (not the shelf).

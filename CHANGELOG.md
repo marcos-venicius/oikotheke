@@ -9,6 +9,7 @@ All notable changes to Oikotheke are documented here. The format follows
 ### Added
 
 - Right-click a book's cover on the shelf to open its actions menu.
+- Rename a book from its details page.
 
 ### Changed
 
