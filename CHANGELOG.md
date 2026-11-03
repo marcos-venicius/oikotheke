@@ -6,6 +6,10 @@ All notable changes to Oikotheke are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Right-click a book's cover on the shelf to open its actions menu.
+
 ### Changed
 
 - In PDFs, the mouse wheel only scrolls the page; hold Shift and scroll to change page.

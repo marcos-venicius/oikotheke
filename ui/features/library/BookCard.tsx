@@ -6,8 +6,9 @@ import {
   StickyNote,
   Trash2,
 } from "lucide-react";
+import { useCallback, useState } from "react";
 import type { Book } from "@/lib/types";
-import { Menu, type MenuItem } from "@/components/Menu";
+import { ContextMenu, Menu, type MenuItem, type MenuPoint } from "@/components/Menu";
 import { cn } from "@/lib/cn";
 import { formatLabel } from "@/lib/location";
 import { BookCover } from "./BookCover";
@@ -32,6 +33,8 @@ export function BookCard({
   const progress = book.progress;
   const missing = book.status === "missing";
   const removed = book.removedAt !== null;
+  const [contextAt, setContextAt] = useState<MenuPoint | null>(null);
+  const closeContext = useCallback(() => setContextAt(null), []);
 
   const items: MenuItem[] = [];
   if (onDetails)
@@ -62,7 +65,12 @@ export function BookCard({
       <button
         type="button"
         onClick={onOpen}
-        disabled={!onOpen}
+        // Right click opens the same actions as the "…" button, at the pointer.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (items.length > 0) setContextAt({ x: e.clientX, y: e.clientY });
+        }}
+        aria-disabled={!onOpen}
         aria-label={`Open ${book.title}`}
         className={cn(
           "relative aspect-[2/3] w-full overflow-hidden rounded-md bg-surface-2 shadow-soft",
@@ -127,6 +135,7 @@ export function BookCard({
           />
         )}
       </div>
+      <ContextMenu at={contextAt} items={items} onClose={closeContext} />
     </div>
   );
 }

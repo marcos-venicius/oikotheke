@@ -117,6 +117,9 @@ Each library item shows at least:
 - A visual indicator when the book has notes.
 - A way to open the book.
 
+A book's actions (details, remove, restore, delete permanently) are in its "…" menu; right-clicking
+the cover opens the same menu at the pointer.
+
 The layout must feel like a library, not a plain file list.
 
 Books are ordered by **most recent activity** (`updated_at`), then by import date: opening a
